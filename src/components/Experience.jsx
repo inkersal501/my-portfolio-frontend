@@ -1,27 +1,17 @@
+import { useState, useEffect } from "react";
+import { fetchExperience } from "../js/fetchData";
+
 const Experience = () => {
-    const experienceData = [
-      {
-        company: "Tech Solutions Inc.",
-        role: "Full-Stack Developer",
-        duration: "2022 - Present",
-        contributions: [
-          "Developed scalable web applications using React and Node.js.",
-          "Optimized database performance using MySQL and MongoDB.",
-          "Integrated third-party APIs for seamless functionality.",
-        ],
-      },
-      {
-        company: "Web Innovators",
-        role: "Frontend Developer",
-        duration: "2020 - 2022",
-        contributions: [
-          "Built dynamic UI components with React and Tailwind CSS.",
-          "Enhanced site performance by 40% through code optimization.",
-          "Implemented responsive designs for mobile and desktop users.",
-        ],
-      },
-    ];
-  
+    const [experienceData, setExperienceData] = useState([]);
+
+    useEffect(()=>{ 
+      const fetch = async () => {
+        const data = await fetchExperience();
+        setExperienceData(data);
+      };
+      fetch();
+    }, []);
+
     return (
       <section className="py-15">
         <h2 className="text-3xl font-semibold text-center mb-6" id="experience">Experience</h2>

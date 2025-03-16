@@ -1,8 +1,13 @@
 import git from '../assets/github.svg';
 import linkedin from '../assets/linkedin.svg';
 import email from '../assets/email.svg';
+import { useSelector } from 'react-redux';
+ 
+const Contact = () =>{  
 
-const Contact = () => (
+  const profileData = useSelector((state)=> state.profile.data);
+  
+  return(
     <section className="py-15 text-center">
       <h2 className="text-3xl font-semibold mb-6" id="contact">Contact Me</h2>
       <p className="text-gray-400 mb-4">
@@ -10,12 +15,12 @@ const Contact = () => (
       </p>
       <div className="flex justify-center gap-4">
         <a 
-            href="mailto:inkersal@example.com" 
+            href={`mailto:${profileData.email}`}
             className="px-4 py-4 rounded-lg bg-white shadow-md hover:bg-yellow-300 transition">
             <img src={email} className="w-7" alt="Email" />
         </a>
         <a
-            href="https://github.com/inkersal501"
+            href={profileData.github}
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-4 rounded-lg bg-white shadow-md hover:bg-yellow-300 transition"
@@ -23,7 +28,7 @@ const Contact = () => (
             <img src={git} className="w-7" alt="Github" />
         </a>
         <a
-            href="https://www.linkedin.com/in/inkersalmahendran"
+            href={profileData.linkedin}
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-4 rounded-lg bg-white shadow-md hover:bg-yellow-300 transition"
@@ -32,5 +37,6 @@ const Contact = () => (
         </a>
       </div>
     </section>
-  );
-  export default Contact;
+  ); 
+}
+export default Contact;
