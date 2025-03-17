@@ -20,7 +20,7 @@ const Header = () => {
 
 
   return(
-    <header className="text-center py-15 p-6" id="top">
+    <header className="text-center pt-15 pb-10 p-6" id="top">
       <div className="max-w-4xl mx-auto">
         <Fade direction="up" triggerOnce>
           <div className="flex justify-center">

@@ -17,7 +17,7 @@ const About = () => {
 
 
   return (
-    <section className="py-15 max-w-4xl mx-auto">
+    <section className="py-10 p-6">
       <h2 className="text-3xl font-semibold text-white" id="about">About Me</h2>
       {loading ? 
       <p className="text-gray-300 mt-4">Loading...</p>

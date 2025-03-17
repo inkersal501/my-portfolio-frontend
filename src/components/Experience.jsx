@@ -13,7 +13,7 @@ const Experience = () => {
     }, []);
 
     return (
-      <section className="py-15">
+      <section className="py-10">
         <h2 className="text-3xl font-semibold text-center mb-6" id="experience">Experience</h2>
         <div className="space-y-8 border-l-4 border-yellow-500 pl-6">
           {experienceData.map((exp, index) => (

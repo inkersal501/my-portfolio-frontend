@@ -13,7 +13,7 @@ const Skills = ()=> {
     fetch();
   },[]);
   return (
-    <section>
+    <section className="py-10 p-6">
         <h3 className="text-2xl font-semibold text-white mt-6">Skills & Technologies</h3>
         <ul className="text-gray-300 mt-2 list-disc list-inside">
         {skills.map((data, index)=> (
