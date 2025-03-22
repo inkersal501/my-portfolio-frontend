@@ -2,7 +2,7 @@ const Faq = () => {
     const faqs = [
       {
         question: "What technologies do you specialize in?",
-        answer: "I specialize in React, Node.js, PHP, AWS, and MySQL.",
+        answer: "I specialize in React, Node.js, ExpressJs, NextJs, TypeScript, PHP and MySQL.",
       },
       {
         question: "Do you take freelance projects?",
@@ -11,7 +11,7 @@ const Faq = () => {
     ];
   
     return (
-      <section className="py-10">
+      <section className="py-10 p-6">
         <h2 className="text-3xl font-semibold text-center mb-6" id="faq">Frequently Asked Questions</h2>
         <div className="space-y-4">
           {faqs.map((faq, index) => (

@@ -22,5 +22,9 @@ const fetchExperience = async ()=> {
     const response = await axios.get(`${API_ENDPOINT}/experience`);
     return response.data;
 }
+const fetchCertifications = async ()=> {
+    const response = await axios.get(`${API_ENDPOINT}/certifications`);
+    return response.data;
+}
 
-export {fetchProfile, fetchAbout, fetchSkills, fetchExperience, };
+export {fetchProfile, fetchAbout, fetchSkills, fetchExperience, fetchCertifications,};

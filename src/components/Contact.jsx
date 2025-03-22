@@ -8,7 +8,7 @@ const Contact = () =>{
   const profileData = useSelector((state)=> state.profile.data);
   
   return(
-    <section className="py-10 text-center">
+    <section className="py-10 text-center p-6">
       <h2 className="text-3xl font-semibold mb-6" id="contact">Contact Me</h2>
       <p className="text-gray-400 mb-4">
         Let&apos;s collaborate! Feel free to reach out via email or social platforms.

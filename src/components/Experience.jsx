@@ -7,7 +7,7 @@ const Experience = () => {
     useEffect(()=>{ 
       const fetch = async () => {
         const data = await fetchExperience();
-        setExperienceData(data);
+        setExperienceData(data); 
       };
       fetch();
     }, []);
@@ -22,8 +22,8 @@ const Experience = () => {
               <h3 className="text-xl font-semibold">{exp.role} @ {exp.company}</h3>
               <p className="text-gray-400 italic">{exp.duration}</p>
               <ul className="mt-2 text-gray-300 list-disc list-inside">
-                {exp.contributions.map((point, i) => (
-                  <li key={i}>{point}</li>
+                {exp.contributions.map((con, i) => (
+                  <li key={i}>{con.contribution}</li>
                 ))}
               </ul>
             </div>
