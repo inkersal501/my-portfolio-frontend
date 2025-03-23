@@ -1,4 +1,3 @@
-import { Helmet } from "react-helmet"; 
 import Header from "../components/Header";
 import About from "../components/About";
 import Skills from "../components/Skills";
@@ -9,27 +8,24 @@ import Certifications from "../components/Certifications";
 import Faq from "../components/Faq";
 import Contact from "../components/Contact";
 import Navbar from "../components/Navbar";
+import FloatingSocials from "../components/FloatingSocials";
+import BackToTop from "../components/BacktoTop";
 
 function Home() {
   return (
     <div className="min-h-screen bg-black text-white p-6">
-      <Helmet>
-        <title>Inkersal Mahendran - Full-Stack Developer | React, Node.js, PHP</title>
-        <meta
-          name="description"
-          content="Inkersal Mahendran, a Full-Stack Developer specializing in React, Node.js, and PHP. Crafting scalable and high-performance web applications."
-        />
-      </Helmet>
       <Navbar />
       <Header />
       <About />
       <Skills />
       <Experience />
-      <Certifications />
       <Projects />
+      <Certifications />      
       <Faq />
       <Contact />
       <Footer />
+      <FloatingSocials />
+      <BackToTop />
     </div>
   );
 }

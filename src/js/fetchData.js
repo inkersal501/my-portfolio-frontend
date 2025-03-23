@@ -26,5 +26,13 @@ const fetchCertifications = async ()=> {
     const response = await axios.get(`${API_ENDPOINT}/certifications`);
     return response.data;
 }
+const fetchProjects = async ()=>{
+    const response = await axios.get(`${API_ENDPOINT}/projects`);
+    return response.data;
+}
+const fetchFaqs = async ()=>{
+    const response = await axios.get(`${API_ENDPOINT}/faqs`);
+    return response.data;
+}
 
-export {fetchProfile, fetchAbout, fetchSkills, fetchExperience, fetchCertifications,};
+export {fetchProfile, fetchAbout, fetchSkills, fetchExperience, fetchCertifications, fetchProjects, fetchFaqs, };

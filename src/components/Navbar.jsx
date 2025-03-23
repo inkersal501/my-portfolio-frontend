@@ -17,9 +17,10 @@ const Navbar = () => {
 
         {/* Desktop Menu */}
         <ul className="hidden md:flex space-x-6 text-gray-300">
-        <li><button onClick={() => handleScroll('about')} className="hover:text-yellow-400 cursor-pointer">About</button></li>
-        <li><button onClick={() => handleScroll('projects')} className="hover:text-yellow-400 cursor-pointer">Projects</button></li>
+        <li><button onClick={() => handleScroll('about')} className="hover:text-yellow-400 cursor-pointer">About</button></li>        
+        <li><button onClick={() => handleScroll('skills')} className="hover:text-yellow-400 cursor-pointer">Skills</button></li>
         <li><button onClick={() => handleScroll('experience')} className="hover:text-yellow-400 cursor-pointer">Experience</button></li>
+        <li><button onClick={() => handleScroll('projects')} className="hover:text-yellow-400 cursor-pointer">Projects</button></li>        
         <li><button onClick={() => handleScroll('certifications')} className="hover:text-yellow-400 cursor-pointer">Certifications</button></li>
         <li><button onClick={() => handleScroll('contact')} className="hover:text-yellow-400 cursor-pointer">Contact</button></li>
         </ul>
@@ -32,12 +33,13 @@ const Navbar = () => {
 
       {/* Mobile Dropdown */}
       {isOpen && (
-        <div className="md:hidden bg-gray-800 text-white text-center py-4">
-          <a href="#about" className="block py-2 hover:text-yellow-300" onClick={() => setIsOpen(false)}>About</a>
-          <a href="#projects" className="block py-2 hover:text-yellow-300" onClick={() => setIsOpen(false)}>Projects</a>
-          <a href="#experience" className="block py-2 hover:text-yellow-300" onClick={() => setIsOpen(false)}>Experience</a>
-          <a href="#certifications" className="block py-2 hover:text-yellow-300" onClick={() => setIsOpen(false)}>Certifications</a>
-          <a href="#contact" className="block py-2 hover:text-yellow-300" onClick={() => setIsOpen(false)}>Contact</a>
+        <div className="md:hidden bg-gray-800 text-white text-center py-4 px-4">
+          <button className="block py-2 hover:text-yellow-300" onClick={() => { handleScroll('about'); setIsOpen(false); }}>About</button>
+          <button className="block py-2 hover:text-yellow-300" onClick={() => { handleScroll('skills'); setIsOpen(false); }}>Skills</button>
+          <button className="block py-2 hover:text-yellow-300" onClick={() => { handleScroll('projects'); setIsOpen(false); }}>Projects</button>
+          <button className="block py-2 hover:text-yellow-300" onClick={() => { handleScroll('experience'); setIsOpen(false); }}>Experience</button>
+          <button className="block py-2 hover:text-yellow-300" onClick={() => { handleScroll('certifications'); setIsOpen(false); }}>Certifications</button>
+          <button className="block py-2 hover:text-yellow-300" onClick={() => { handleScroll('contact'); setIsOpen(false); }}>Contact</button>
         </div>
       )}
     </nav>

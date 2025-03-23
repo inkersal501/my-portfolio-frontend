@@ -16,10 +16,13 @@ const profileSlice = createSlice({
             tagline: "",
             bio: "",
             description: "",
-            lastUpdated: "",
+            last_updated: "",
+            email: "",
             linkedin: "",
-            github: "",
-            email: "",            
+            github: "", 
+            leetcode:"",
+            hackerrank: "",
+            crio: ""                        
         },  
     },
     reducers: {
