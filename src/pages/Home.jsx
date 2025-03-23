@@ -9,7 +9,8 @@ import Faq from "../components/Faq";
 import Contact from "../components/Contact";
 import Navbar from "../components/Navbar";
 import FloatingSocials from "../components/FloatingSocials";
-import BackToTop from "../components/BacktoTop"; 
+import BackToTop from "../components/BackToTop"; 
+
 function Home() {
   return (
     <div className="min-h-screen bg-black text-white p-6">
