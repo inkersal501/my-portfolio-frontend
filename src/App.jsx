@@ -3,6 +3,7 @@ import './App.css'
 import Loading from './components/Loading';
 import Home from './pages/Home'
 import { useEffect, useState } from 'react'
+import { Analytics } from "@vercel/analytics/react";
 
 function App() { 
   const [loading, setLoading] = useState(true);
@@ -14,6 +15,7 @@ function App() {
   return (
     <>  
       {loading? <Loading /> : <Home />}
+      <Analytics />
     </>
   )
 }
