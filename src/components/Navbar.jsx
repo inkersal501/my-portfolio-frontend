@@ -13,7 +13,7 @@ const Navbar = () => {
     <nav className="fixed top-0 left-0 w-full bg-gray-900 shadow-lg z-50">
       <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
         {/* Logo */}
-        <a  onClick={() => handleScroll('top')} className="text-white text-2xl font-bold hover:text-yellow-400 cursor-pointer">Inkersal</a>
+        <a href="https://inkersal-mahendran.vercel.app/" className="text-white text-2xl font-bold hover:text-yellow-400 cursor-pointer">Inkersal</a>
 
         {/* Desktop Menu */}
         <ul className="hidden md:flex space-x-6 text-gray-300">
