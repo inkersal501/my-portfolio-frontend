@@ -27,7 +27,7 @@ const Experience = () => {
         {/* Timeline Container */}
         <div className="relative border-l-4 border-yellow-500 pl-6 sm:pl-10">
           {experienceData.map((exp, index) => (
-            <Slide key={index} direction="left" triggerOnce>
+            <Slide key={index} direction="up" triggerOnce>
               <div className="relative mb-12">
                 
                 {/* Timeline Dot */}

@@ -2,7 +2,7 @@ import git from "../assets/github.svg";
 import linkedin from "../assets/linkedin.svg";
 import email from "../assets/email.svg";
 import { useSelector } from "react-redux";
-
+import { Slide } from "react-awesome-reveal";
 const Contact = () => {
   const profileData = useSelector((state) => state.profile.data) || {};
 
@@ -23,9 +23,11 @@ const Contact = () => {
       </p>
 
       {/* Contact Links */}
+      <Slide direction="up" triggerOnce>
       <div className="flex justify-center gap-6">
         {contactItems.map(({ id, href, icon, alt, label }) =>
           href ? (
+            
             <a
               key={id}
               href={href}
@@ -36,9 +38,11 @@ const Contact = () => {
             >
               <img src={icon} className="w-8 h-8" alt={alt} />
             </a>
+            
           ) : null
         )}
       </div>
+      </Slide>
     </section>
   );
 };

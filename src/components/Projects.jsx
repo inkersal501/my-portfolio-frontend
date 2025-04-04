@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchProjects } from "../js/fetchData";
-import { FaTimes, FaEye } from "react-icons/fa";
+import { FaTimes, FaExternalLinkAlt } from "react-icons/fa";
 import { Zoom } from "react-awesome-reveal";
 
 const Projects = () => {
@@ -29,16 +29,19 @@ const Projects = () => {
           {projects.map((project) => (
             <Zoom key={project.id} duration={800} triggerOnce>
               <div
-                className="relative bg-gray-800 p-6 rounded-lg shadow-md border border-yellow-500 cursor-pointer transform transition duration-300 hover:scale-105 hover:shadow-yellow-500 hover:border-yellow-300"
-                onClick={() => setSelectedProject(project)}
+                className="relative bg-gray-800 p-6 rounded-lg shadow-md border border-yellow-500 transform transition duration-300 hover:scale-105 hover:shadow-yellow-500 hover:border-yellow-300"
               >
-                <h3 className="text-xl font-semibold text-gray-200">{project.title}</h3>
+                <h3 className="text-xl font-semibold text-gray-200 cursor-pointer hover:text-yellow-400" onClick={() => setSelectedProject(project)} >{project.title}</h3>
                 <p className="text-sm text-yellow-400 mt-2">{project.tech_used}</p>
 
                 {/* Hover Indicator - Eye Icon */}
-                <div className="absolute top-2 right-2 bg-yellow-500 text-gray-900 p-2 rounded-full shadow-md transition-transform duration-200 hover:scale-125">
-                  <FaEye size={16} />
-                </div>
+                <a 
+                  href={project.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute top-4 right-4 flex gap-2 bg-yellow-500 text-gray-900 p-2 rounded-full shadow-md transition-transform duration-200">
+                  <FaExternalLinkAlt />
+                </a>
               </div>
             </Zoom>
           ))}
@@ -52,7 +55,7 @@ const Projects = () => {
             
             {/* Close Button */}
             <button
-              className="absolute top-4 right-4 text-gray-400 hover:text-yellow-300 transition-transform hover:scale-110"
+              className="absolute top-4 right-4 text-gray-400 cursor-pointer hover:text-yellow-300 transition-transform hover:scale-110"
               onClick={() => setSelectedProject(null)}
             >
               <FaTimes size={22} />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Slide } from "react-awesome-reveal";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -10,7 +11,9 @@ const Navbar = () => {
   };
 
   return (
+    
     <nav className="fixed top-0 left-0 w-full bg-gray-900 shadow-lg z-50">
+      <Slide direction="down" triggerOnce>
       <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
         {/* Logo */}
         <a href="https://inkersal-mahendran.vercel.app/" className="text-white text-2xl font-bold hover:text-yellow-400 cursor-pointer">Inkersal</a>
@@ -30,6 +33,7 @@ const Navbar = () => {
           ☰
         </button>
       </div>
+      </Slide>
 
       {/* Mobile Dropdown */}
       {isOpen && (
@@ -42,7 +46,7 @@ const Navbar = () => {
           <button className="block py-2 hover:text-yellow-300" onClick={() => { handleScroll('contact'); setIsOpen(false); }}>Contact</button>
         </div>
       )}
-    </nav>
+    </nav> 
   );
 };
 
