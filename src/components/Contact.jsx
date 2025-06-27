@@ -1,21 +1,21 @@
-import git from "../assets/github.svg";
-import linkedin from "../assets/linkedin.svg";
-import email from "../assets/email.svg";
 import { useSelector } from "react-redux";
 import { Slide } from "react-awesome-reveal";
+import { FaGithub, FaLinkedin } from "react-icons/fa";
+import { MdOutlineMail } from "react-icons/md";
+
 const Contact = () => {
   const profileData = useSelector((state) => state.profile.data) || {};
 
   const contactItems = [
-    { id: "email", href: `mailto:${profileData.email}`, icon: email, alt: "Email icon", label: "Send me an email" },
-    { id: "github", href: profileData.github, icon: git, alt: "GitHub icon", label: "Visit my GitHub profile" },
-    { id: "linkedin", href: profileData.linkedin, icon: linkedin, alt: "LinkedIn icon", label: "Connect on LinkedIn" },
+    { id: "email", href: `mailto:${profileData.email}`, icon: <MdOutlineMail size={24}/>, label: "Send me an email" },
+    { id: "github", href: profileData.github, icon: <FaGithub size={24}/>, label: "Visit my GitHub profile" },
+    { id: "linkedin", href: profileData.linkedin, icon: <FaLinkedin size={24}/>, label: "Connect on LinkedIn" },
   ];
 
   return (
-    <section className="py-16 px-6 bg-gray-900 text-yellow-400 text-center">
+    <section className="py-16 px-6 bg-gray-900 text-center">
       {/* Section Title */}
-      <h2 className="text-4xl font-bold mb-6 drop-shadow-md" id="contact">
+      <h2 className="text-4xl font-bold mb-6 drop-shadow-md text-yellow-400 " id="contact">
         Contact Me
       </h2>
       <p className="text-gray-400 mb-8 max-w-lg mx-auto">
@@ -25,7 +25,7 @@ const Contact = () => {
       {/* Contact Links */}
       <Slide direction="up" triggerOnce>
       <div className="flex justify-center gap-6">
-        {contactItems.map(({ id, href, icon, alt, label }) =>
+        {contactItems.map(({ id, href, icon, label }) =>
           href ? (
             
             <a
@@ -33,10 +33,10 @@ const Contact = () => {
               href={href}
               target={id !== "email" ? "_blank" : "_self"}
               rel="noopener noreferrer"
-              className="p-4 rounded-full bg-white shadow-lg hover:bg-yellow-300 transition-transform transform hover:scale-110 hover:shadow-yellow-500"
+              className="text-black p-4 rounded-full bg-white shadow-lg hover:bg-yellow-300 transition-transform transform hover:scale-110 hover:shadow-yellow-500"
               aria-label={label}
             >
-              <img src={icon} className="w-8 h-8" alt={alt} />
+              {icon}
             </a>
             
           ) : null

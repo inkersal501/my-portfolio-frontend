@@ -29,7 +29,7 @@ const Projects = () => {
           {projects.map((project) => (
             <Zoom key={project.id} duration={800} triggerOnce>
               <div
-                className="relative bg-gray-800 p-6 rounded-lg shadow-md border border-yellow-500 transform transition duration-300 hover:scale-105 hover:shadow-yellow-500 hover:border-yellow-300"
+                className="h-full relative bg-gray-800 p-6 rounded-lg shadow-md border border-yellow-500 transform transition duration-300 hover:scale-105 hover:shadow-yellow-500 hover:border-yellow-300"
               >
                 <h3 className="text-xl font-semibold text-gray-200 cursor-pointer hover:text-yellow-400" onClick={() => setSelectedProject(project)} >{project.title}</h3>
                 <p className="text-sm text-yellow-400 mt-2">{project.tech_used}</p>

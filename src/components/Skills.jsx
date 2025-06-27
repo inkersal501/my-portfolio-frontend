@@ -28,7 +28,7 @@ const Skills = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-8">
           {skills.map((data, index) => (
             <Zoom key={index} duration={800} triggerOnce>
-              <div className="bg-gray-800 p-6 rounded-xl shadow-md border border-yellow-400 transform transition duration-300 hover:scale-105 hover:shadow-lg hover:shadow-yellow-500">
+              <div className="h-full bg-gray-800 p-6 rounded-xl shadow-md border border-yellow-400 transform transition duration-300 hover:scale-105 hover:shadow-lg hover:shadow-yellow-500">
                 <h4 className="text-lg sm:text-xl font-semibold">{data.category}</h4>
                 <p className="text-gray-400 mt-2 text-sm sm:text-base">{data.skills}</p>
               </div>

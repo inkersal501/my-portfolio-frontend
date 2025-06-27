@@ -10,8 +10,8 @@ function App() {
   useEffect(()=>{
     setTimeout(()=>{
       setLoading(false);
-    }, 800);
-  }, [])
+    }, 2500);
+  }, []);
   return (
     <>  
       {loading? <Loading /> : <Home />}

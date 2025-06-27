@@ -32,7 +32,7 @@ const Certifications = () => {
                 href={cert.url} 
                 target="_blank" 
                 rel="noreferrer"
-                className="block bg-gray-800 p-6 rounded-lg shadow-md border border-yellow-500 transform transition-all duration-300 hover:-translate-y-2 hover:shadow-yellow-500 hover:border-yellow-300"
+                className="h-full block bg-gray-800 p-6 rounded-lg shadow-md border border-yellow-500 transform transition-all duration-300 hover:-translate-y-2 hover:shadow-yellow-500 hover:border-yellow-300"
               >
                 <p className="text-lg font-semibold text-gray-200 text-center">{cert.name}</p>
               </a>

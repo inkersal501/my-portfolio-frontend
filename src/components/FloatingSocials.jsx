@@ -6,11 +6,11 @@ const FloatingSocials = () => {
   const profileData = useSelector((state) => state.profile?.data || {});
 
   const socialLinks = [
-    { id: "github", icon: <FaGithub />, link: profileData.github, name: "GitHub" },
-    { id: "linkedin", icon: <FaLinkedin />, link: profileData.linkedin, name: "LinkedIn" }, 
-    { id: "leetcode", icon: <FaCode />, link: profileData.leetcode, name: "LeetCode" },
-    { id: "hackerrank", icon: <FaHackerrank />, link: profileData.hackerrank, name: "HackerRank" },
-    { id: "crio", icon: <FaLaptopCode />, link: profileData.crio, name: "Crio.do" },
+    { id: "github", icon: <FaGithub size="20" />, link: profileData.github, name: "GitHub" },
+    { id: "linkedin", icon: <FaLinkedin size="20" />, link: profileData.linkedin, name: "LinkedIn" }, 
+    { id: "leetcode", icon: <FaCode size="20" />, link: profileData.leetcode, name: "LeetCode" },
+    { id: "hackerrank", icon: <FaHackerrank size="20" />, link: profileData.hackerrank, name: "HackerRank" },
+    { id: "crio", icon: <FaLaptopCode size="20" />, link: profileData.crio, name: "Crio.do" },
   ];
 
   return (
@@ -27,7 +27,7 @@ const FloatingSocials = () => {
             {social.name}
           </span>
  
-          <div className="p-2 bg-gray-800 text-white rounded-full shadow-lg hover:bg-yellow-400 hover:text-gray-900 transition duration-300 transform hover:scale-110">
+          <div className="p-3 bg-gray-800 text-white rounded-full shadow-lg hover:bg-yellow-400 hover:text-gray-900 transition duration-300 transform hover:scale-110">
             {social.icon}
           </div>
         </a>
