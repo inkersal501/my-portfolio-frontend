@@ -7,15 +7,25 @@ const Footer = () => {
 
   useEffect(() => {
     if (profileData?.last_updated) {
-      setLastUpdated(new Date(profileData.last_updated).toLocaleString("en-US"));
+      const date = new Date(profileData?.last_updated);
+      const formattedDateTime = `${date.getDate().toString().padStart(2, "0")}-` +
+      `${date.toLocaleString("en-IN", { month: "short" })}-` +
+      `${date.getFullYear()} ` +
+      `${date.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+      }).toLowerCase()}`;
+      setLastUpdated(formattedDateTime);
     }
   }, [profileData?.last_updated]);
-
+      
   return (
     <footer className="text-center text-gray-400 py-4 bg-black">
       <div className="container mx-auto">
         {lastUpdated && <p className="mb-2 text-sm">Last Updated: {lastUpdated}</p>}
-        <p className="text-sm">© {new Date().getFullYear()} {profileData?.name || "Your Name"}. All rights reserved.</p>
+        <p className="text-sm">© {new Date().getFullYear()} {profileData?.name || ""}. All rights reserved.</p>
       </div>
     </footer>
   );

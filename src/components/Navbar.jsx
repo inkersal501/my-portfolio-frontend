@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Slide } from "react-awesome-reveal";
+import { useSelector } from "react-redux";
 
 const Navbar = () => {
+
+  const profileData = useSelector((state) => state.profile?.data || {});
   const [isOpen, setIsOpen] = useState(false);
   const handleScroll = (id) => {
     const element = document.getElementById(id);
@@ -17,7 +20,9 @@ const Navbar = () => {
       <div className="mx-auto px-6 py-4 flex justify-between items-center">
         {/* Logo */}
         <a href="https://inkersal-mahendran.vercel.app/" className="text-white text-2xl font-bold hover:text-yellow-400 cursor-pointer">Inkersal</a>
-
+        <a href={profileData.resume} target="_blank"
+        className="inline-block px-5 py-2 rounded-xl bg-yellow-400 text-gray-900 shadow-lg transition transform hover:scale-110"
+        >Resume</a>
         {/* Desktop Menu */}
         <ul className="hidden md:flex space-x-6 text-gray-300">
         <li><button onClick={() => handleScroll('about')} className="hover:text-yellow-400 cursor-pointer">About</button></li>        
