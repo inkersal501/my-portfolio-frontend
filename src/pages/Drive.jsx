@@ -344,6 +344,9 @@ export default function Drive() {
     const districtRoadGeometry = new THREE.PlaneGeometry(16, 6);
     const zonePillarMaterial = new THREE.MeshStandardMaterial({ color: 0x495940, roughness: 0.8 });
     const zoneAccentMaterial = new THREE.MeshStandardMaterial({ color: 0xc6f36a, emissive: 0x3b501c, emissiveIntensity: 0.35 });
+    const districtBlockGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const districtDarkMaterial = new THREE.MeshStandardMaterial({ color: 0x283328, roughness: 0.9 });
+    const districtTrimMaterial = new THREE.MeshStandardMaterial({ color: 0x879b6e, roughness: 0.75 });
     const districtLandmarks = [];
     ZONES.forEach((zone, index) => {
       const district = new THREE.Group();
@@ -369,10 +372,29 @@ export default function Drive() {
           container.position.set(-2.6 + i * 2.6, 0.75, -4);
           district.add(container);
         }
+        const warehouse = new THREE.Mesh(districtBlockGeometry, districtDarkMaterial);
+        warehouse.scale.set(10, 5, 4);
+        warehouse.position.set(0, 2.5, -10);
+        district.add(warehouse);
+        for (let bay = -1; bay <= 1; bay += 1) {
+          const door = new THREE.Mesh(districtBlockGeometry, districtTrimMaterial);
+          door.scale.set(2.2, 2.7, 0.08);
+          door.position.set(bay * 2.8, 1.4, -7.96);
+          district.add(door);
+        }
       } else if (zone.id === 'nature') {
         const hill = new THREE.Mesh(new THREE.ConeGeometry(3.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x566e42, roughness: 1 }));
         hill.position.set(0, 1.5, -5);
         district.add(hill);
+        const pond = new THREE.Mesh(new THREE.CircleGeometry(3, 24), new THREE.MeshStandardMaterial({ color: 0x394e43, metalness: 0.18, roughness: 0.3 }));
+        pond.rotation.x = -Math.PI / 2;
+        pond.position.set(5.5, -0.02, -7);
+        district.add(pond);
+        for (let i = 0; i < 3; i += 1) {
+          const pine = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.7, 6), districtTrimMaterial);
+          pine.position.set(-5 + i * 2, 1.35, -7);
+          district.add(pine);
+        }
       } else if (zone.id === 'portfolio') {
         const sculpture = new THREE.Mesh(new THREE.TorusKnotGeometry(1.2, 0.22, 64, 8), zoneAccentMaterial);
         sculpture.position.set(0, 2, -4);
@@ -390,10 +412,30 @@ export default function Drive() {
         const marker = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.18, 8, 32), zoneAccentMaterial);
         marker.position.set(0, 2.5, -4);
         district.add(marker);
+        const track = new THREE.Mesh(new THREE.RingGeometry(5.5, 8, 48), roadMaterial);
+        track.rotation.x = -Math.PI / 2;
+        track.position.set(0, -0.02, -9);
+        district.add(track);
+        for (let i = 0; i < 8; i += 1) {
+          const angle = i * Math.PI / 4;
+          const barrier = new THREE.Mesh(districtBlockGeometry, i % 2 ? zoneAccentMaterial : districtTrimMaterial);
+          barrier.scale.set(1.2, 0.35, 0.35);
+          barrier.position.set(Math.sin(angle) * 8, 0.2, -9 + Math.cos(angle) * 8);
+          barrier.rotation.y = angle;
+          district.add(barrier);
+        }
       } else {
         const tower = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 2.5), zonePillarMaterial);
         tower.position.set(0, 2.5, -4);
         district.add(tower);
+        const shop = new THREE.Mesh(districtBlockGeometry, districtDarkMaterial);
+        shop.scale.set(5, 3, 3);
+        shop.position.set(5, 1.5, -6);
+        district.add(shop);
+        const awning = new THREE.Mesh(districtBlockGeometry, districtTrimMaterial);
+        awning.scale.set(5.3, 0.2, 1);
+        awning.position.set(5, 2.5, -4);
+        district.add(awning);
       }
       world.add(district);
       districtLandmarks.push({ mesh: district, baseZ: zone.z - 12 });
@@ -900,7 +942,8 @@ export default function Drive() {
         const targetVelocity = braking ? 0 : accelerating ? gearLimit * vehicleSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
         const response = braking ? 12 : (accelerating || reversing ? 1.6 : 0.8);
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
-      const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35;
+      const onDistrictRoad = districtLandmarks.some(({ mesh }, index) => Math.abs(car.position.x - (mesh.position.x + (index % 2 ? -7 : 7))) < 8 && Math.abs(car.position.z - (mesh.position.z + 12)) < 3);
+      const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35 && !onDistrictRoad;
       if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, settingsRef.current.garage.vehicle === 'suv' ? 9 : 7);
       steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 10 : 12, delta);
       if (!progressRef.current.drift) {
