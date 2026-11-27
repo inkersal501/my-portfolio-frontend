@@ -44,6 +44,39 @@ export default function Drive() {
   const settingsRef = useRef({ paused, handling, quality, muted });
   settingsRef.current = { paused, handling, quality, muted };
 
+  const toggleSound = async () => {
+    if (!audioRef.current) {
+      const AudioContextType = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextType) { setToast('Audio is unavailable in this browser.'); return; }
+      const audio = new AudioContextType();
+      const filter = audio.createBiquadFilter();
+      const gain = audio.createGain();
+      filter.type = 'lowpass'; filter.frequency.value = 420; filter.Q.value = 0.7;
+      gain.gain.value = 0;
+      filter.connect(gain); gain.connect(audio.destination);
+      const voices = [1, 2, 3].map((ratio, index) => {
+        const oscillator = audio.createOscillator();
+        const voiceGain = audio.createGain();
+        oscillator.type = index === 0 ? 'triangle' : 'sawtooth';
+        oscillator.frequency.value = 48 * ratio;
+        voiceGain.gain.value = [0.8, 0.22, 0.08][index];
+        oscillator.connect(voiceGain); voiceGain.connect(filter); oscillator.start();
+        return { oscillator, ratio };
+      });
+      audioRef.current = audio;
+      engineRef.current = { voices, filter, gain };
+    }
+    try { await audioRef.current.resume(); setMuted((value) => !value); }
+    catch { setToast('Could not start sound. Please try again.'); }
+  };
+
+  useEffect(() => () => {
+    engineRef.current?.voices.forEach(({ oscillator }) => oscillator.stop());
+    audioRef.current?.close();
+    engineRef.current = null;
+    audioRef.current = null;
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     let renderer;
@@ -250,6 +283,7 @@ export default function Drive() {
       const delta = Math.min((now - previous) / 1000 || 0, 0.04);
       previous = now;
       if (settingsRef.current.paused) {
+        if (engineRef.current && audioRef.current) engineRef.current.gain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.08);
         renderer.render(scene, camera);
         frame = requestAnimationFrame(animate);
         return;
@@ -361,8 +395,11 @@ export default function Drive() {
       camera.lookAt(cameraTarget);
       renderer.render(scene, camera);
       if (engineRef.current && audioRef.current) {
-        engineRef.current.oscillator.frequency.setTargetAtTime(55 + Math.abs(velocity) * 12, audioRef.current.currentTime, 0.12);
-        engineRef.current.gain.gain.setTargetAtTime(settingsRef.current.muted ? 0 : 0.025 + Math.min(Math.abs(velocity) / 10, 1) * 0.035, audioRef.current.currentTime, 0.12);
+        const revs = Math.min(Math.abs(velocity) / 10, 1);
+        const frequency = 48 + revs * 72;
+        engineRef.current.voices.forEach(({ oscillator, ratio }) => oscillator.frequency.setTargetAtTime(frequency * ratio, audioRef.current.currentTime, 0.15));
+        engineRef.current.filter.frequency.setTargetAtTime(320 + revs * 430, audioRef.current.currentTime, 0.15);
+        engineRef.current.gain.gain.setTargetAtTime(settingsRef.current.muted ? 0 : 0.055 + revs * 0.035, audioRef.current.currentTime, 0.15);
       }
       if (now - speedUpdateAt > 120) {
         speedUpdateAt = now;
@@ -425,7 +462,7 @@ export default function Drive() {
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><i>Swipe to steer · collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span></div>
     <canvas className="drive-minimap" ref={minimapRef} width="140" height="140" aria-label="Nearby map" />
-    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={async () => { if (!audioRef.current) { const AudioContextType = window.AudioContext || window.webkitAudioContext; if (!AudioContextType) return; const audio = new AudioContextType(); audioRef.current = audio; const oscillator = audio.createOscillator(); const gain = audio.createGain(); oscillator.type = 'sawtooth'; oscillator.frequency.value = 55; gain.gain.value = 0; oscillator.connect(gain); gain.connect(audio.destination); oscillator.start(); engineRef.current = { oscillator, gain }; } await audioRef.current.resume(); setMuted((value) => !value); }}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
+    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
       <button aria-label="Steer left" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }}>LEFT</button>
