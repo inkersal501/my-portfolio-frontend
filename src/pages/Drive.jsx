@@ -262,6 +262,53 @@ export default function Drive() {
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: makeTextTexture(stop.label), transparent: true, side: THREE.DoubleSide }));
       sign.position.set(0, 2.8, 0.1);
       gate.add(sign);
+
+      // Each destination has a different silhouette that can be recognized from the road.
+      const landmarkMaterial = new THREE.MeshStandardMaterial({ color: 0x495440, roughness: 0.8, metalness: 0.1 });
+      const detailMaterial = new THREE.MeshStandardMaterial({ color: 0xc6f36a, emissive: 0x384b1c, emissiveIntensity: 0.35 });
+      const landmark = new THREE.Group();
+      landmark.position.set(0, 0, -6);
+      if (stop.id === 'about') {
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.8, 0.5, 8), landmarkMaterial);
+        base.position.y = 0.25;
+        const portrait = new THREE.Mesh(new THREE.IcosahedronGeometry(1.3, 1), detailMaterial);
+        portrait.position.y = 2;
+        landmark.add(base, portrait);
+      } else if (stop.id === 'experience') {
+        for (let i = 0; i < 4; i += 1) {
+          const height = 1 + i * 0.8;
+          const column = new THREE.Mesh(new THREE.BoxGeometry(0.85, height, 1.2), landmarkMaterial);
+          column.position.set((i - 1.5) * 1.1, height / 2, 0);
+          landmark.add(column);
+          const cap = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 1.25), detailMaterial);
+          cap.position.set(column.position.x, height, 0);
+          landmark.add(cap);
+        }
+      } else if (stop.id === 'projects') {
+        for (let i = 0; i < 3; i += 1) {
+          const panel = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.4, 0.2), landmarkMaterial);
+          panel.position.set((i - 1) * 2, 1.5, 0);
+          panel.rotation.y = (1 - i) * 0.18;
+          const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.8), detailMaterial);
+          screen.position.z = 0.11;
+          panel.add(screen);
+          landmark.add(panel);
+        }
+      } else if (stop.id === 'skills') {
+        for (let i = 0; i < 5; i += 1) {
+          const block = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.05, 1.05), i % 2 ? detailMaterial : landmarkMaterial);
+          block.position.set((i % 2 - 0.5) * 1.15, 0.55 + Math.floor(i / 2) * 1.12, 0);
+          block.rotation.y = i * 0.16;
+          landmark.add(block);
+        }
+      } else {
+        const envelope = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.2, 0.35), landmarkMaterial);
+        envelope.position.y = 1.5;
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 0.1), detailMaterial);
+        stripe.position.set(0, 1.6, 0.22);
+        landmark.add(envelope, stripe);
+      }
+      gate.add(landmark);
       gate.position.set(stop.x, 0, stop.z);
       world.add(gate);
       return gate;
