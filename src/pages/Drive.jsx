@@ -30,6 +30,7 @@ export default function Drive() {
   const [speed, setSpeed] = useState(0);
   const [collected, setCollected] = useState(0);
   const [unlocked, setUnlocked] = useState(0);
+  const [destinationMeters, setDestinationMeters] = useState(null);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -251,12 +252,11 @@ export default function Drive() {
       });
       crashCooldown -= delta;
       gateObjects.forEach((gate, index) => {
-        const lap = Math.round((car.position.z - stops[index].z) / 300) * 300;
+        const laps = Math.round((car.position.z - stops[index].z) / 300);
         gate.position.x = stops[index].x + Math.round((car.position.x - stops[index].x) / 300) * 300;
-        gate.position.z = stops[index].z + lap;
-        if (Math.abs(car.position.z - gate.position.z) < 2 && Math.abs(car.position.x - stops[index].x) < 3 && lastUnlocked < index) {
-          lastUnlocked = index;
-          setUnlocked(index + 1);
+        gate.position.z = stops[index].z + laps * 300;
+        if (Math.abs(car.position.z - gate.position.z) < 2 && Math.abs(car.position.x - gate.position.x) < 3) {
+          if (lastUnlocked < index) { lastUnlocked = index; setUnlocked(index + 1); }
           setActiveStop(stops[index].id);
           setToast(`${stops[index].label} DISCOVERED`);
           window.setTimeout(() => setToast(''), 2200);
@@ -270,8 +270,11 @@ export default function Drive() {
           pickup.mesh.rotation.y += delta * 1.8;
           pickup.mesh.position.y = 0.65 + Math.sin(now * 0.003 + pickup.mesh.position.z) * 0.12;
           if (Math.hypot(car.position.x - pickup.mesh.position.x, car.position.z - pickup.mesh.position.z) < 1.1) {
-            pickup.found = true;
-            pickup.mesh.visible = false;
+          pickup.found = true;
+          pickup.mesh.visible = false;
+          const resetAt = car.position.z - 70 - Math.random() * 100;
+          pickup.mesh.position.set(car.position.x + (Math.random() - 0.5) * 8, 0.65, resetAt);
+          window.setTimeout(() => { pickup.found = false; pickup.mesh.visible = true; }, 1800);
             setCollected((count) => count + 1);
             setToast('NICE PICKUP!');
             window.setTimeout(() => setToast(''), 1000);
@@ -298,6 +301,7 @@ export default function Drive() {
       if (now - speedUpdateAt > 120) {
         speedUpdateAt = now;
         setSpeed(Math.round(Math.abs(velocity) * 9));
+        setDestinationMeters(targetStop ? Math.round(Math.hypot(targetStop.x - car.position.x, targetStop.z - car.position.z)) : null);
       }
       frame = requestAnimationFrame(animate);
     }
@@ -328,7 +332,7 @@ export default function Drive() {
     <canvas ref={canvasRef} className="drive-canvas" aria-label="Three dimensional portfolio driving playground. Use arrow keys or WASD to drive." />
     <a className="drive-back" href="/">IM<span>.</span> <small>BACK TO PORTFOLIO</small></a>
     <div className="drive-heading"><span>INKERSAL MAHENDRAN</span><h1>DRIVE TO<br/><em>EXPLORE.</em></h1><p>Full-stack engineer · Chennai, India</p></div>
-    <div className="drive-hud"><span className="drive-live"/> OPEN WORLD <span>{String(unlocked).padStart(2, '0')} / 04 STOPS</span><span>CRYSTALS {String(collected).padStart(2, '0')} / 12</span></div>
+    <div className="drive-hud"><span className="drive-live"/> OPEN WORLD <span>{String(unlocked).padStart(2, '0')} / 04 STOPS</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
     {stop && <section className="drive-card"><button onClick={() => setActiveStop(null)} aria-label="Close destination">×</button><small>{stop.label}</small><h2>{stop.title}</h2>
       {stop.id === 'about' && about.map((text) => <p key={text}>{text}</p>)}
       {stop.id === 'experience' && experience.map((item) => <p key={item.id}><strong>{item.role} · {item.company}</strong><br/>{item.duration}<br/>{item.contribution}</p>)}
