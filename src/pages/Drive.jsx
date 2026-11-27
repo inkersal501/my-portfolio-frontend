@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { about, experience, profile, projects, skills } from '../data/portfolio';
 import { guidanceDirection, routePoint } from './driveLogic';
+import { ZONES, MISSIONS, zoneAt, initialProgress, advanceProgress } from './driveProgress';
 
 const stops = [
   { id: 'about', label: 'ABOUT', title: 'A little about me', x: -7, z: -20, color: 0xc6f36a },
@@ -50,10 +51,37 @@ export default function Drive() {
   const [quality, setQuality] = useState('high');
   const [muted, setMuted] = useState(true);
   const [webglError, setWebglError] = useState(false);
+  const [zoneName, setZoneName] = useState('City Center');
+  const [showMissions, setShowMissions] = useState(false);
+  const [showGarage, setShowGarage] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(() => { try { return window.localStorage.getItem('portfolio-drive-tutorial-v1') !== 'done'; } catch { return true; } });
+  const [timeOfDay, setTimeOfDay] = useState('night');
+  const [weather, setWeather] = useState('clear');
+  const [garage, setGarage] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem('portfolio-drive-garage-v1') || window.localStorage.getItem('portfolio-drive-garage') || '{}');
+      return { vehicle: ['sport', 'suv'].includes(saved.vehicle) ? saved.vehicle : 'sport', paint: ['#c6f36a', '#e9e8e4', '#789876', '#343f35'].includes(saved.paint) ? saved.paint : '#c6f36a', wheels: ['#9ba893', '#202620', '#c6f36a'].includes(saved.wheels) ? saved.wheels : '#9ba893' };
+    } catch { return { vehicle: 'sport', paint: '#c6f36a', wheels: '#9ba893' }; }
+  });
+  const [progress, setProgress] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem('portfolio-drive-progress-v1') || window.localStorage.getItem('portfolio-drive-progress') || '{}');
+      if (saved.version !== undefined && saved.version !== 1) return initialProgress();
+      const base = initialProgress();
+      for (const key of ['zones', 'relics', 'destinations', 'completed']) if (Array.isArray(saved[key])) base[key] = saved[key].filter((item) => typeof item === 'string');
+      base.route = saved.route === true;
+      base.speed = saved.speed === true;
+      base.xp = Number.isFinite(saved.xp) ? Math.max(0, saved.xp) : 0;
+      return base;
+    } catch { return initialProgress(); }
+  });
+  const progressRef = useRef(progress);
   const audioRef = useRef(null);
   const engineRef = useRef(null);
-  const settingsRef = useRef({ paused, handling, quality, muted });
-  settingsRef.current = { paused, handling, quality, muted };
+  const settingsRef = useRef({ paused, handling, quality, muted, garage, timeOfDay, weather });
+  settingsRef.current = { paused: paused || showGarage || showTutorial, handling, quality, muted, garage, timeOfDay, weather };
+
+  useEffect(() => { try { window.localStorage.setItem('portfolio-drive-garage-v1', JSON.stringify({ version: 1, ...garage })); } catch { /* Keep settings for this visit. */ } }, [garage]);
 
   const toggleSound = async () => {
     if (!audioRef.current) {
@@ -97,8 +125,21 @@ export default function Drive() {
     scene.background = new THREE.Color(0x10130f);
     scene.fog = new THREE.Fog(0x10130f, 24, 65);
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+    camera.position.set(0, 5.2, 18);
+    camera.lookAt(0, 0.7, 3);
     const world = new THREE.Group();
     scene.add(world);
+    const rainGeometry = new THREE.BufferGeometry();
+    const rainPositions = new Float32Array(360 * 3);
+    for (let i = 0; i < rainPositions.length; i += 3) {
+      rainPositions[i] = (Math.random() - 0.5) * 44;
+      rainPositions[i + 1] = Math.random() * 18;
+      rainPositions[i + 2] = (Math.random() - 0.5) * 44;
+    }
+    rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+    const rain = new THREE.Points(rainGeometry, new THREE.PointsMaterial({ color: 0xc8dec6, size: 0.09, transparent: true, opacity: 0.55, depthWrite: false }));
+    rain.visible = false;
+    scene.add(rain);
     scene.add(new THREE.HemisphereLight(0xe7f6ce, 0x252a20, 2.1));
     const sun = new THREE.DirectionalLight(0xd7f59c, 3.3);
     sun.position.set(-8, 15, 8);
@@ -158,6 +199,7 @@ export default function Drive() {
     car.add(cabin);
     const wheelGeometry = new THREE.CylinderGeometry(0.26, 0.26, 0.18, 16);
     const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x151715, roughness: 0.8 });
+    const hubMaterial = new THREE.MeshStandardMaterial({ color: 0x9ba893, metalness: 0.7, roughness: 0.35 });
     const wheels = [];
     for (const x of [-0.72, 0.72]) for (const z of [-0.65, 0.65]) {
       const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
@@ -165,7 +207,7 @@ export default function Drive() {
       wheel.position.set(x, 0.3, z);
       car.add(wheel);
       wheels.push(wheel);
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.19, 12), new THREE.MeshStandardMaterial({ color: 0x9ba893, metalness: 0.7, roughness: 0.35 }));
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.19, 12), hubMaterial);
       hub.rotation.z = Math.PI / 2;
       hub.position.copy(wheel.position);
       car.add(hub);
@@ -186,6 +228,21 @@ export default function Drive() {
     const spoiler = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.08, 0.28), new THREE.MeshStandardMaterial({ color: 0x252d21, metalness: 0.25, roughness: 0.5 }));
     spoiler.position.set(0, 0.92, 0.95);
     car.add(spoiler);
+    const roofRack = new THREE.Group();
+    const rackMaterial = new THREE.MeshStandardMaterial({ color: 0x202820, metalness: 0.4, roughness: 0.5 });
+    for (const z of [-0.38, 0.25]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.08, 0.1), rackMaterial);
+      rail.position.set(0, 1.26, z);
+      roofRack.add(rail);
+    }
+    car.add(roofRack);
+    const suvDetails = new THREE.Group();
+    const suvBumper = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.22, 0.22), rackMaterial);
+    suvBumper.position.set(0, 0.43, -1.03);
+    const spare = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.09, 8, 16), wheelMaterial);
+    spare.position.set(0, 0.82, 1.08);
+    suvDetails.add(suvBumper, spare);
+    car.add(suvDetails);
     const boostGlow = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xc6f36a, transparent: true, opacity: 0.8 }));
     boostGlow.rotation.x = Math.PI / 2;
     boostGlow.position.set(0, 0.48, 1.48);
@@ -198,6 +255,26 @@ export default function Drive() {
     world.add(carShadow);
     car.position.set(0, 0, 8);
     world.add(car);
+
+    // A few lightweight cars travel along the main road and slow near the player.
+    const traffic = [];
+    const trafficBodyGeometry = new THREE.BoxGeometry(1.25, 0.45, 2.1);
+    const trafficCabinGeometry = new THREE.BoxGeometry(0.9, 0.45, 0.9);
+    const trafficBodyMaterial = new THREE.MeshStandardMaterial({ color: 0x788b69, roughness: 0.65 });
+    const trafficGlassMaterial = new THREE.MeshStandardMaterial({ color: 0x202b24, roughness: 0.4 });
+    for (let i = 0; i < 4; i += 1) {
+      const vehicle = new THREE.Group();
+      const shell = new THREE.Mesh(trafficBodyGeometry, trafficBodyMaterial);
+      shell.position.y = 0.55;
+      const glass = new THREE.Mesh(trafficCabinGeometry, trafficGlassMaterial);
+      glass.position.y = 0.98;
+      vehicle.add(shell, glass);
+      const direction = i % 2 ? 1 : -1;
+      vehicle.position.set(direction * 2.5, 0, -35 - i * 40);
+      vehicle.rotation.y = direction > 0 ? Math.PI : 0;
+      world.add(vehicle);
+      traffic.push({ vehicle, direction });
+    }
 
     // A fixed starting plaza gives the player a recognizable place to return to.
     const plaza = new THREE.Group();
@@ -245,6 +322,61 @@ export default function Drive() {
     parkingSign.position.set(18, 2.1, 7);
     parking.add(parkingSign);
     world.add(parking);
+
+    // Distinct low-poly district entrances form a legible route along the main road.
+    const zonePillarGeometry = new THREE.BoxGeometry(1.1, 4, 1.1);
+    const zonePillarMaterial = new THREE.MeshStandardMaterial({ color: 0x495940, roughness: 0.8 });
+    const zoneAccentMaterial = new THREE.MeshStandardMaterial({ color: 0xc6f36a, emissive: 0x3b501c, emissiveIntensity: 0.35 });
+    const districtLandmarks = [];
+    ZONES.forEach((zone, index) => {
+      const district = new THREE.Group();
+      district.position.set(index % 2 ? 14 : -14, 0, zone.z - 12);
+      for (const x of [-3.3, 3.3]) {
+        const pillar = new THREE.Mesh(zonePillarGeometry, zonePillarMaterial);
+        pillar.position.set(x, 2, 0);
+        district.add(pillar);
+      }
+      const arch = new THREE.Mesh(new THREE.BoxGeometry(7.7, 0.3, 1.1), zoneAccentMaterial);
+      arch.position.y = 4;
+      district.add(arch);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 1.1), new THREE.MeshBasicMaterial({ map: makeTextTexture(zone.name.toUpperCase()), transparent: true, side: THREE.DoubleSide }));
+      sign.position.set(0, 3.1, 0.6);
+      district.add(sign);
+      if (zone.id === 'industrial') {
+        for (let i = 0; i < 3; i += 1) {
+          const container = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.5, 3), zonePillarMaterial);
+          container.position.set(-2.6 + i * 2.6, 0.75, -4);
+          district.add(container);
+        }
+      } else if (zone.id === 'nature') {
+        const hill = new THREE.Mesh(new THREE.ConeGeometry(3.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x566e42, roughness: 1 }));
+        hill.position.set(0, 1.5, -5);
+        district.add(hill);
+      } else if (zone.id === 'portfolio') {
+        const sculpture = new THREE.Mesh(new THREE.TorusKnotGeometry(1.2, 0.22, 64, 8), zoneAccentMaterial);
+        sculpture.position.set(0, 2, -4);
+        district.add(sculpture);
+        const headquarters = new THREE.Mesh(new THREE.BoxGeometry(9, 6, 3), zonePillarMaterial);
+        headquarters.position.set(0, 3, -10);
+        district.add(headquarters);
+        const identity = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.4), new THREE.MeshBasicMaterial({ map: makeTextTexture(profile.name.toUpperCase()), transparent: true, side: THREE.DoubleSide }));
+        identity.position.set(0, 5, -8.45);
+        district.add(identity);
+        const entrance = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 3), new THREE.MeshStandardMaterial({ color: 0x202920 }));
+        entrance.position.set(0, 1.5, -8.44);
+        district.add(entrance);
+      } else if (zone.id === 'racing') {
+        const marker = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.18, 8, 32), zoneAccentMaterial);
+        marker.position.set(0, 2.5, -4);
+        district.add(marker);
+      } else {
+        const tower = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 2.5), zonePillarMaterial);
+        tower.position.set(0, 2.5, -4);
+        district.add(tower);
+      }
+      world.add(district);
+      districtLandmarks.push({ mesh: district, baseZ: zone.z - 12 });
+    });
 
     const trees = [];
     const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x59604b, roughness: 1 });
@@ -478,6 +610,21 @@ export default function Drive() {
       setToast(message);
       toastTimer = later(() => setToast(''), duration);
     };
+    const recordProgress = (type, value) => {
+      const result = advanceProgress(progressRef.current, type, value);
+      if (JSON.stringify(result.progress) === JSON.stringify(progressRef.current)) return;
+      progressRef.current = result.progress;
+      setProgress(result.progress);
+      try { window.localStorage.setItem('portfolio-drive-progress-v1', JSON.stringify(result.progress)); } catch { /* Continue without persistence. */ }
+      if (result.earned.length) announce(`MISSION COMPLETE · +${result.earned.reduce((sum, mission) => sum + mission.reward, 0)} XP`, 3500);
+    };
+    let lastZone = '';
+    let appliedGarage = '';
+    let appliedTime = '';
+    const skyColors = { day: 0x71886b, sunset: 0x5d4b3c, night: 0x10130f };
+    const targetSky = new THREE.Color(skyColors.night);
+    let targetSunIntensity = 1.4;
+    let targetWindowOpacity = 0.7;
     let frame;
     let visible = true;
     let previous = 0;
@@ -520,6 +667,7 @@ export default function Drive() {
       announce('DRIVE THROUGH THE LIME RINGS IN ORDER');
     };
     const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; setGuidance(null); currentGear = 1; setGear(1); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
+    const resetProgressObjects = () => { discovered.clear(); nearbyGates.clear(); setUnlocked(0); lastZone = ''; hiddenRelics.forEach((relic) => { relic.found = false; relic.mesh.visible = true; }); };
     const onQualityChange = () => resize();
     const playPickup = () => {
       if (settingsRef.current.muted || !audioRef.current) return;
@@ -565,6 +713,7 @@ export default function Drive() {
     window.addEventListener('drive-challenge', startChallenge);
     window.addEventListener('drive-route', startRoute);
     window.addEventListener('drive-reset', resetCar);
+    window.addEventListener('drive-reset-progress', resetProgressObjects);
     window.addEventListener('drive-shift', onShift);
     window.addEventListener('drive-quality-change', onQualityChange);
     canvas.addEventListener('pointerdown', pointerdown);
@@ -575,7 +724,7 @@ export default function Drive() {
     const resize = () => {
       const { width, height } = canvas.getBoundingClientRect();
       if (!width || !height) return;
-      renderer.setPixelRatio(settingsRef.current.quality === 'low' ? 1 : Math.min(window.devicePixelRatio || 1, 1.6));
+      renderer.setPixelRatio(settingsRef.current.quality === 'low' ? 1 : Math.min(window.devicePixelRatio || 1, settingsRef.current.quality === 'medium' ? 1.2 : 1.6));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.fov = width < 700 ? 68 : 55;
@@ -599,13 +748,65 @@ export default function Drive() {
       if (!visible) return;
       const delta = Math.min((now - previous) / 1000 || 0, 0.04);
       previous = now;
+      const chosenGarage = settingsRef.current.garage;
+      const garageKey = `${chosenGarage.vehicle}:${chosenGarage.paint}:${chosenGarage.wheels}`;
+      if (garageKey !== appliedGarage) {
+        appliedGarage = garageKey;
+        body.material.color.set(chosenGarage.paint);
+        hood.material.color.set(chosenGarage.paint);
+        hubMaterial.color.set(chosenGarage.wheels);
+        const suv = chosenGarage.vehicle === 'suv';
+        body.scale.set(suv ? 1.1 : 1, suv ? 1.45 : 1, suv ? 0.9 : 1);
+        cabin.scale.set(suv ? 1.1 : 1, suv ? 1.3 : 1, suv ? 1.25 : 1);
+        cabin.position.y = suv ? 1.08 : 0.97;
+        roofRack.position.y = suv ? 0.2 : 0;
+        roofRack.visible = suv;
+        suvDetails.visible = suv;
+        spoiler.visible = !suv;
+        wheels.forEach((wheel) => wheel.scale.setScalar(suv ? 1.2 : 1));
+      }
       if (settingsRef.current.paused) {
+        clearControls();
         if (engineRef.current && audioRef.current) engineRef.current.gain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.08);
         renderer.render(scene, camera);
         frame = requestAnimationFrame(animate);
         return;
       }
+      const weatherMode = settingsRef.current.weather;
+      rain.visible = weatherMode === 'rain' && !reducedMotion.matches;
+      rainGeometry.setDrawRange(0, settingsRef.current.quality === 'low' ? 140 : 360);
+      scene.fog.near = THREE.MathUtils.damp(scene.fog.near, weatherMode === 'fog' ? 10 : 24, 1.2, delta);
+      scene.fog.far = THREE.MathUtils.damp(scene.fog.far, weatherMode === 'fog' ? 38 : 65, 1.2, delta);
+      roadMaterial.roughness = weatherMode === 'rain' ? 0.32 : 0.9;
+      if (rain.visible) {
+        const positions = rainGeometry.attributes.position;
+        for (let i = 0; i < positions.count; i += 1) {
+          const y = positions.getY(i) - delta * 14;
+          positions.setY(i, y < 0 ? y + 18 : y);
+        }
+        positions.needsUpdate = true;
+        rain.position.set(car.position.x, 0, car.position.z);
+      }
       if (route) route.elapsed += delta;
+      const zone = zoneAt(car.position.z);
+      if (zone.id !== lastZone) {
+        lastZone = zone.id;
+        setZoneName(zone.name);
+        if (!progressRef.current.zones.includes(zone.id)) announce(`${zone.name.toUpperCase()} · ${zone.description}`, 3000);
+        recordProgress('zones', zone.id);
+      }
+      if (settingsRef.current.timeOfDay !== appliedTime) {
+        appliedTime = settingsRef.current.timeOfDay;
+        targetSky.setHex(skyColors[appliedTime]);
+        targetSunIntensity = appliedTime === 'day' ? 4 : appliedTime === 'sunset' ? 2.5 : 1.4;
+        targetWindowOpacity = appliedTime === 'day' ? 0.2 : 0.7;
+        sun.color.setHex(appliedTime === 'sunset' ? 0xffc98c : 0xd7f59c);
+        lampGlowMaterial.color.setHex(appliedTime === 'day' ? 0x859878 : 0xd8ff9a);
+      }
+      scene.background.lerp(targetSky, 1 - Math.exp(-delta * 0.8));
+      scene.fog.color.copy(scene.background);
+      sun.intensity = THREE.MathUtils.damp(sun.intensity, targetSunIntensity, 0.8, delta);
+      windowMaterials.forEach((material) => { material.opacity = THREE.MathUtils.damp(material.opacity, targetWindowOpacity, 0.8, delta); });
       if (challengeRef.current.active) {
         challengeRef.current.elapsed += delta;
         if (challengeRef.current.elapsed >= 60) {
@@ -618,17 +819,24 @@ export default function Drive() {
         }
       }
       const accelerating = keys.has('w') || keys.has('arrowup');
+      if (!progressRef.current.speed && Math.abs(velocity) * 9 >= 90) recordProgress('speed', true);
       const reversing = keys.has('s') || keys.has('arrowdown');
       const braking = keys.has(' ');
       const left = keys.has('a') || keys.has('arrowleft');
       const right = keys.has('d') || keys.has('arrowright');
       const direction = pointer.down ? touchSteer : Number(right) - Number(left);
+      traffic.forEach(({ vehicle, direction: travel }) => {
+        const distance = Math.hypot(car.position.x - vehicle.position.x, car.position.z - vehicle.position.z);
+        if (distance > 8) vehicle.position.z += travel * 3.5 * delta;
+        if (Math.abs(vehicle.position.z - car.position.z) > 125) vehicle.position.z = car.position.z - travel * 110;
+      });
         const gearLimit = gearLimits[currentGear];
-        const targetVelocity = braking ? 0 : accelerating ? gearLimit * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
+        const vehicleSpeed = settingsRef.current.garage.vehicle === 'suv' ? 0.82 : 1;
+        const targetVelocity = braking ? 0 : accelerating ? gearLimit * vehicleSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
         const response = braking ? 12 : (accelerating || reversing ? 1.6 : 0.8);
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
       const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35;
-      if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, 7);
+      if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, settingsRef.current.garage.vehicle === 'suv' ? 9 : 7);
       steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 10 : 12, delta);
       const grip = settingsRef.current.handling === 'relaxed' ? 1.4 : THREE.MathUtils.lerp(0.95, 0.53, Math.min(Math.abs(velocity) / 10, 1));
       yaw += steer * velocity * delta * grip;
@@ -664,6 +872,7 @@ export default function Drive() {
             announce(`ROUTE COMPLETE · ${route.elapsed.toFixed(1)} SECONDS`, 3500);
             playEffect(440, 880, 0.3);
             setCollected((count) => count + 5);
+            recordProgress('route', true);
             checkpoint.visible = false;
             route = null;
           } else {
@@ -746,6 +955,7 @@ export default function Drive() {
           setUnlocked(discovered.size);
           setActiveStop(stops[index].id);
           announce(`${stops[index].label} DISCOVERED`, 2200);
+          recordProgress('destinations', stops[index].id);
         }
         if (!nearby) nearbyGates.delete(index);
       });
@@ -769,7 +979,7 @@ export default function Drive() {
           }
         }
       });
-      hiddenRelics.forEach((relic) => {
+      hiddenRelics.forEach((relic, index) => {
         if (relic.found) return;
         if (!reducedMotion.matches) relic.mesh.rotation.y += delta * 0.6;
         if (Math.hypot(car.position.x - relic.mesh.position.x, car.position.z - relic.mesh.position.z) < 1.7) {
@@ -778,6 +988,7 @@ export default function Drive() {
           setCollected((count) => count + 3);
           playPickup();
           announce('HIDDEN RELIC FOUND · +3 CRYSTALS', 2600);
+          recordProgress('relics', String(index));
         }
       });
       if (targetStop) {
@@ -792,6 +1003,10 @@ export default function Drive() {
         item.z += lapZ;
         item.building.position.set(item.x, item.height / 2 - 0.06, item.z);
         item.windows.position.set(item.x, item.height * 0.64, item.z - item.width / 2 - 0.012);
+      });
+      districtLandmarks.forEach(({ mesh, baseZ }) => {
+        mesh.position.z = baseZ + Math.round((car.position.z - baseZ) / 300) * 300;
+        mesh.position.x += Math.round((car.position.x - mesh.position.x) / 300) * 300;
       });
       const mobileView = window.innerWidth < 700;
       const lookAhead = (mobileView ? 2.5 : 3.5) + Math.min(Math.abs(velocity) * 0.25, 3);
@@ -836,6 +1051,7 @@ export default function Drive() {
       window.removeEventListener('drive-challenge', startChallenge);
       window.removeEventListener('drive-route', startRoute);
       window.removeEventListener('drive-reset', resetCar);
+      window.removeEventListener('drive-reset-progress', resetProgressObjects);
       window.removeEventListener('drive-shift', onShift);
       window.removeEventListener('drive-quality-change', onQualityChange);
       canvas.removeEventListener('pointerdown', pointerdown);
@@ -860,11 +1076,12 @@ export default function Drive() {
     onLostPointerCapture: () => window.dispatchEvent(new KeyboardEvent('keyup', { key })),
   });
   return <main className="drive-page">
+    {showTutorial && !webglError && <section className="drive-world-panel drive-tutorial" aria-label="Driving controls"><small>WELCOME TO THE WORLD</small><h2>Ready to explore?</h2><p>Drive with <strong>WASD or arrow keys</strong>. Hold Space to brake, Shift to boost, and press J to jump.</p><p>Use Q and E to change gears. Choose a destination for directions, or explore freely and collect crystals.</p><p>On a phone, use the buttons on screen. Open the garage to change your vehicle.</p><button className="drive-garage-done" onClick={() => { try { window.localStorage.setItem('portfolio-drive-tutorial-v1', 'done'); } catch { /* Continue for this visit. */ } setShowTutorial(false); }}>START DRIVING</button></section>}
     {webglError && <div className="drive-error"><h1>3D mode is unavailable</h1><p>Your browser could not start WebGL. You can still use the regular portfolio.</p><a href="/">Back to portfolio</a></div>}
     <canvas ref={canvasRef} className="drive-canvas" aria-label="Three dimensional portfolio driving playground. Use arrow keys or WASD to drive." />
     <a className="drive-back" href="/">IM<span>.</span> <small>BACK TO PORTFOLIO</small></a>
     <div className="drive-heading"><span>INKERSAL MAHENDRAN</span><h1>DRIVE TO<br/><em>EXPLORE.</em></h1><p>Full-stack engineer · Chennai, India</p></div>
-    <div className="drive-hud"><span className="drive-live"/> OPEN WORLD <span>{String(unlocked).padStart(2, '0')} / {String(stops.length).padStart(2, '0')} STOPS</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
+    <div className="drive-hud"><span className="drive-live"/> {zoneName.toUpperCase()} <span>LVL {Math.floor(progress.xp / 150) + 1} · {progress.xp} XP</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
     {guidance && <div className="drive-guidance" role="status"><span>{guidance.label} · {destinationMeters} M</span><strong>{guidance.direction}</strong><button onClick={() => window.dispatchEvent(new CustomEvent('drive-destination', { detail: null }))}>CLEAR</button></div>}
     {nearbyStop && !stop && <button className="drive-interact" onClick={() => setActiveStop(nearbyStop.id)}>OPEN {nearbyStop.label} <span>· ENTER</span></button>}
     {stop && <section className="drive-card"><button onClick={() => setActiveStop(null)} aria-label="Close destination">×</button><small>{stop.label}</small><h2>{stop.title}</h2>
@@ -879,9 +1096,12 @@ export default function Drive() {
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span>GEAR {gear}</span></div>
     <div className="drive-challenge"><button onClick={() => window.dispatchEvent(new Event('drive-challenge'))}>{challenge.active ? 'RESTART RUN' : '60-SECOND CRYSTAL RUN'}</button><span aria-live="polite">{challenge.active ? `${60 - challenge.seconds}s · ${challenge.score} collected` : challenge.finished ? `Run: ${challenge.score} · Best: ${challenge.best}` : `Best: ${challenge.best} crystals`}</span><button onClick={() => setShowAchievements((value) => !value)} aria-expanded={showAchievements}>ACHIEVEMENTS</button></div>
     <div className="drive-route"><button onClick={() => window.dispatchEvent(new Event('drive-route'))}>{routeRun.active ? 'RESTART ROUTE' : 'START CHECKPOINT ROUTE'}</button><span>{routeRun.active ? `GATE ${routeRun.index + 1} / 5 · ${routeRun.elapsed.toFixed(1)}s` : routeRun.finished ? `COMPLETE · ${routeRun.elapsed.toFixed(1)}s · +5 CRYSTALS` : '5 GATES · +5 CRYSTALS'}</span></div>
+    <div className="drive-world-menu"><button onClick={() => setShowMissions((value) => !value)} aria-expanded={showMissions}>MISSIONS</button><button onClick={() => setShowGarage(true)}>GARAGE</button></div>
+    {showMissions && <section className="drive-world-panel drive-missions" aria-label="Missions"><button className="drive-panel-close" onClick={() => setShowMissions(false)} aria-label="Close missions">×</button><small>EXPLORER LEVEL {Math.floor(progress.xp / 150) + 1} · {progress.xp} XP</small><h2>Your missions</h2>{MISSIONS.map((mission) => { const count = mission.id === 'route' || mission.id === 'speed' ? Number(progress[mission.id]) : progress[mission.id].length; const complete = progress.completed.includes(mission.id); return <p key={mission.id}><strong>{complete ? '✓ ' : ''}{mission.label}</strong><span>{Math.min(count, mission.target)} / {mission.target} · {complete ? 'COMPLETE' : `+${mission.reward} XP`}</span></p>; })}<small>Progress is saved in this browser.</small><button className="drive-reset-progress" onClick={() => { if (!window.confirm("Reset mission progress and XP? Your crystal run best will be kept.")) return; const fresh = initialProgress(); progressRef.current = fresh; setProgress(fresh); window.dispatchEvent(new Event("drive-reset-progress")); try { window.localStorage.setItem("portfolio-drive-progress-v1", JSON.stringify(fresh)); } catch { /* Continue without persistence. */ } }}>RESET MISSION PROGRESS</button></section>}
+    {showGarage && <section className="drive-world-panel drive-garage" aria-label="Garage"><button className="drive-panel-close" onClick={() => setShowGarage(false)} aria-label="Close garage">×</button><small>YOUR GARAGE · GAME PAUSED</small><h2>Choose your ride</h2><div className="drive-garage-options"><button aria-pressed={garage.vehicle === 'sport'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'sport' }))}>SPORT <small>Faster on roads</small></button><button aria-pressed={garage.vehicle === 'suv'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'suv' }))}>SUV <small>Better off-road</small></button></div><label>PAINT <select value={garage.paint} onChange={(event) => setGarage((value) => ({ ...value, paint: event.target.value }))}><option value="#c6f36a">Lime</option><option value="#e9e8e4">Ivory</option><option value="#789876">Sage</option><option value="#343f35">Graphite</option></select></label><label>WHEELS <select value={garage.wheels} onChange={(event) => setGarage((value) => ({ ...value, wheels: event.target.value }))}><option value="#9ba893">Silver</option><option value="#202620">Black</option><option value="#c6f36a">Lime</option></select></label><button className="drive-garage-done" onClick={() => setShowGarage(false)}>BACK TO DRIVING</button></section>}
     {showAchievements && <section className="drive-achievements" aria-label="Achievements"><button onClick={() => setShowAchievements(false)} aria-label="Close achievements">×</button><h2>Milestones</h2><p>{collected >= 1 ? '✓' : '○'} First crystal <small>Collect a crystal</small></p><p>{collected >= 10 ? '✓' : '○'} Crystal hunter <small>Collect 10 crystals this visit</small></p><p>{unlocked >= stops.length ? '✓' : '○'} Explorer <small>Visit all {stops.length} destinations</small></p><p>{challenge.best >= 5 ? '✓' : '○'} Fast collector <small>Collect 5 crystals in one run</small></p><small>Run bests are saved in this browser. Visit achievements reset when the page reloads.</small></section>}
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
-    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
+    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>TIME <select value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value)}><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label><label>WEATHER <select value={weather} onChange={(event) => setWeather(event.target.value)}><option value="clear">Clear</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
       <button aria-label="Steer left" {...touchControl('ArrowLeft')}>LEFT</button>
