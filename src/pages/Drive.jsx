@@ -150,6 +150,55 @@ export default function Drive() {
     car.position.set(0, 0, 8);
     world.add(car);
 
+    // A fixed starting plaza gives the player a recognizable place to return to.
+    const plaza = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0x353c30, roughness: 0.9 });
+    const darkStone = new THREE.MeshStandardMaterial({ color: 0x242b23, roughness: 0.9 });
+    const lime = new THREE.MeshStandardMaterial({ color: 0xc6f36a, emissive: 0x526d24, emissiveIntensity: 0.45 });
+    const plazaBase = new THREE.Mesh(new THREE.CylinderGeometry(13, 14, 0.2, 64), darkStone);
+    plazaBase.position.y = -0.06;
+    plaza.add(plazaBase);
+    const plazaRing = new THREE.Mesh(new THREE.TorusGeometry(12.2, 0.08, 8, 96), lime);
+    plazaRing.rotation.x = -Math.PI / 2;
+    plazaRing.position.y = 0.06;
+    plaza.add(plazaRing);
+    const monument = new THREE.Group();
+    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.3, 0.6, 8), stone);
+    pedestal.position.y = 0.3;
+    monument.add(pedestal);
+    const sculpture = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), lime);
+    sculpture.position.y = 2.4;
+    monument.add(sculpture);
+    monument.position.set(-8, 0, 3);
+    plaza.add(monument);
+    const welcome = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.75), new THREE.MeshBasicMaterial({ map: makeTextTexture('WELCOME TO MY WORLD'), transparent: true, side: THREE.DoubleSide }));
+    welcome.position.set(0, 3.7, -10);
+    plaza.add(welcome);
+    for (let i = 0; i < 12; i += 1) {
+      const angle = i / 12 * Math.PI * 2;
+      const marker = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), lime);
+      marker.position.set(Math.cos(angle) * 11.2, 0.18, Math.sin(angle) * 11.2);
+      plaza.add(marker);
+    }
+    world.add(plaza);
+
+    const trees = [];
+    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x59604b, roughness: 1 });
+    const leafMaterial = new THREE.MeshStandardMaterial({ color: 0x647e43, roughness: 0.85 });
+    const trunkGeometry = new THREE.CylinderGeometry(0.18, 0.25, 2, 7);
+    const leafGeometry = new THREE.IcosahedronGeometry(1.3, 0);
+    for (let i = 0; i < 40; i += 1) {
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+      trunk.position.y = 1;
+      const canopy = new THREE.Mesh(leafGeometry, leafMaterial);
+      canopy.position.y = 2.8;
+      tree.add(trunk, canopy);
+      tree.position.set((i % 2 ? -1 : 1) * (14 + (i % 5) * 4), 0, 20 - Math.floor(i / 2) * 14);
+      trees.push(tree);
+      world.add(tree);
+    }
+
     const obstacles = [];
     for (let i = 0; i < 160; i += 1) {
       const cellX = (i % 10) * 36 - 162;
@@ -220,6 +269,7 @@ export default function Drive() {
     }
 
     const keys = new Set();
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const pointer = { down: false, x: 0 };
     let touchSteer = 0;
     let velocity = 0;
@@ -350,6 +400,11 @@ export default function Drive() {
         lamp.arm.position.z = lamp.z;
         lamp.bulb.position.z = lamp.z;
       });
+      trees.forEach((tree) => {
+        tree.position.z += Math.round((car.position.z - tree.position.z) / 280) * 280;
+        tree.position.x += Math.round((car.position.x - tree.position.x) / 280) * 280;
+      });
+      if (!reducedMotion.matches) sculpture.rotation.y += delta * 0.35;
       laneMarks.forEach((mark, index) => {
         if (index % 2 === 0) mark.position.z = car.position.z + (index / 2 - 10) * 5;
         else mark.position.x = car.position.x + (Math.floor(index / 2) - 10) * 5;
