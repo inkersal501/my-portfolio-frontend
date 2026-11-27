@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/drive", "destination": "/" },
+    { "source": "/drive/", "destination": "/" }
+  ]
+}
