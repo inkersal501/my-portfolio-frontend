@@ -199,6 +199,7 @@ export default function Drive() {
       renderer.setPixelRatio(settingsRef.current.quality === 'low' ? 1 : Math.min(window.devicePixelRatio || 1, 1.6));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
+      camera.fov = width < 700 ? 68 : 55;
       camera.updateProjectionMatrix();
     };
     const resizeObserver = new ResizeObserver(resize);
@@ -310,8 +311,9 @@ export default function Drive() {
         item.building.position.set(item.x, item.height / 2 - 0.06, item.z);
         item.windows.position.set(item.x, item.height * 0.64, item.z - item.width / 2 - 0.012);
       });
-      const cameraTarget = new THREE.Vector3(car.position.x, 0.7, car.position.z - 5);
-      camera.position.lerp(new THREE.Vector3(car.position.x - Math.sin(yaw) * 2.2, 5.2, car.position.z + 10), 1 - Math.exp(-delta * 3.5));
+      const mobileView = window.innerWidth < 700;
+      const cameraTarget = new THREE.Vector3(car.position.x, mobileView ? 0.55 : 0.7, car.position.z - (mobileView ? 3.5 : 5));
+      camera.position.lerp(new THREE.Vector3(car.position.x - Math.sin(yaw) * (mobileView ? 1.2 : 2.2), mobileView ? 3.8 : 5.2, car.position.z + (mobileView ? 7 : 10)), 1 - Math.exp(-delta * 3.5));
       camera.lookAt(cameraTarget);
       renderer.render(scene, camera);
       if (now - speedUpdateAt > 120) {
