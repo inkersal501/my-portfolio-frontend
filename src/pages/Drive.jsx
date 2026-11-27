@@ -7,6 +7,7 @@ const stops = [
   { id: 'experience', label: 'EXPERIENCE', title: 'The path so far', x: 12, z: -75, color: 0x77c6b3 },
   { id: 'projects', label: 'PROJECTS', title: 'Things I have made', x: -16, z: -145, color: 0xf0b76d },
   { id: 'skills', label: 'SKILLS', title: 'Tools of the trade', x: 8, z: -230, color: 0xb69cff },
+  { id: 'contact', label: 'CONTACT', title: 'Let’s make something', x: -8, z: -270, color: 0xc6f36a },
 ];
 
 function makeTextTexture(text, color = '#f0f1e9') {
@@ -229,7 +230,8 @@ export default function Drive() {
     let steer = 0;
     let yaw = 0;
     let crashCooldown = 0;
-    let lastUnlocked = -1;
+    const discovered = new Set();
+    const nearbyGates = new Set();
     let speedUpdateAt = 0;
     let frame;
     let visible = true;
@@ -238,6 +240,7 @@ export default function Drive() {
     const onShift = (event) => shift(event.detail);
     const keydown = (event) => { const key = event.key.toLowerCase(); if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && (key === 'q' || key === 'e')) shift(key === 'e' ? 1 : -1); if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; keys.add(key); if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) targetStop = null; };
     const keyup = (event) => keys.delete(event.key.toLowerCase());
+    const clearControls = () => { keys.clear(); pointer.down = false; touchSteer = 0; };
     const pointerdown = (event) => { pointer.down = true; pointer.x = event.clientX; canvas.setPointerCapture(event.pointerId); };
     const pointermove = (event) => { if (pointer.down) { touchSteer = THREE.MathUtils.clamp((event.clientX - canvas.getBoundingClientRect().left) / canvas.clientWidth * 2 - 1, -1, 1); pointer.x = event.clientX; } };
     const pointerup = () => { pointer.down = false; };
@@ -257,6 +260,7 @@ export default function Drive() {
     };
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
+    window.addEventListener('blur', clearControls);
     window.addEventListener('drive-destination', onDestination);
     window.addEventListener('drive-reset', resetCar);
     window.addEventListener('drive-shift', onShift);
@@ -355,12 +359,16 @@ export default function Drive() {
         const laps = Math.round((car.position.z - stops[index].z) / 300);
         gate.position.x = stops[index].x + Math.round((car.position.x - stops[index].x) / 300) * 300;
         gate.position.z = stops[index].z + laps * 300;
-        if (Math.abs(car.position.z - gate.position.z) < 2 && Math.abs(car.position.x - gate.position.x) < 3) {
-          if (lastUnlocked < index) { lastUnlocked = index; setUnlocked(index + 1); }
+        const nearby = Math.abs(car.position.z - gate.position.z) < 2 && Math.abs(car.position.x - gate.position.x) < 3;
+        if (nearby && !nearbyGates.has(index)) {
+          nearbyGates.add(index);
+          discovered.add(index);
+          setUnlocked(discovered.size);
           setActiveStop(stops[index].id);
           setToast(`${stops[index].label} DISCOVERED`);
           window.setTimeout(() => setToast(''), 2200);
         }
+        if (!nearby) nearbyGates.delete(index);
       });
       pickups.forEach((pickup) => {
         if (!pickup.found) {
@@ -424,6 +432,7 @@ export default function Drive() {
       intersection.disconnect();
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
+      window.removeEventListener('blur', clearControls);
       window.removeEventListener('drive-destination', onDestination);
       window.removeEventListener('drive-reset', resetCar);
       window.removeEventListener('drive-shift', onShift);
@@ -442,17 +451,24 @@ export default function Drive() {
   }, []);
 
   const stop = stops.find((item) => item.id === activeStop);
+  const touchControl = (key) => ({
+    onPointerDown: (event) => { event.currentTarget.setPointerCapture(event.pointerId); window.dispatchEvent(new KeyboardEvent('keydown', { key })); },
+    onPointerUp: () => window.dispatchEvent(new KeyboardEvent('keyup', { key })),
+    onPointerCancel: () => window.dispatchEvent(new KeyboardEvent('keyup', { key })),
+    onLostPointerCapture: () => window.dispatchEvent(new KeyboardEvent('keyup', { key })),
+  });
   return <main className="drive-page">
     {webglError && <div className="drive-error"><h1>3D mode is unavailable</h1><p>Your browser could not start WebGL. You can still use the regular portfolio.</p><a href="/">Back to portfolio</a></div>}
     <canvas ref={canvasRef} className="drive-canvas" aria-label="Three dimensional portfolio driving playground. Use arrow keys or WASD to drive." />
     <a className="drive-back" href="/">IM<span>.</span> <small>BACK TO PORTFOLIO</small></a>
     <div className="drive-heading"><span>INKERSAL MAHENDRAN</span><h1>DRIVE TO<br/><em>EXPLORE.</em></h1><p>Full-stack engineer · Chennai, India</p></div>
-    <div className="drive-hud"><span className="drive-live"/> OPEN WORLD <span>{String(unlocked).padStart(2, '0')} / 04 STOPS</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
+    <div className="drive-hud"><span className="drive-live"/> OPEN WORLD <span>{String(unlocked).padStart(2, '0')} / {String(stops.length).padStart(2, '0')} STOPS</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
     {stop && <section className="drive-card"><button onClick={() => setActiveStop(null)} aria-label="Close destination">×</button><small>{stop.label}</small><h2>{stop.title}</h2>
       {stop.id === 'about' && about.map((text) => <p key={text}>{text}</p>)}
       {stop.id === 'experience' && experience.map((item) => <p key={item.id}><strong>{item.role} · {item.company}</strong><br/>{item.duration}<br/>{item.contribution}</p>)}
       {stop.id === 'projects' && projects.map((item) => <p key={item.id}><a href={item.link} target="_blank" rel="noreferrer"><strong>{item.title} ↗</strong></a><br/>{item.tech}</p>)}
       {stop.id === 'skills' && skills.map((item) => <p key={item.id}><strong>{item.category}</strong><br/>{item.skills}</p>)}
+      {stop.id === 'contact' && <p>Have a project in mind? <a href={`mailto:${profile.email}`}>{profile.email} ↗</a><br/><a href={profile.linkedin} target="_blank" rel="noreferrer">Connect on LinkedIn ↗</a></p>}
       {stop.id === 'about' && <p><a href={profile.github} target="_blank" rel="noreferrer">GitHub ↗</a> · <a href={profile.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a> · <a href={profile.leetcode} target="_blank" rel="noreferrer">LeetCode ↗</a></p>}
     </section>}
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>Q / E SHIFT</span><span>SHIFT BOOST · J JUMP</span><i>Collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
@@ -461,10 +477,11 @@ export default function Drive() {
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
-      <button aria-label="Steer left" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }}>LEFT</button>
-      <button aria-label="Accelerate" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp' })); }}>GO</button>
-      <button aria-label="Steer right" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); }}>RIGHT</button>
-      <button aria-label="Brake" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })); }}>BRAKE</button>
+      <button aria-label="Steer left" {...touchControl('ArrowLeft')}>LEFT</button>
+      <button aria-label="Accelerate" {...touchControl('ArrowUp')}>GO</button>
+      <button aria-label="Steer right" {...touchControl('ArrowRight')}>RIGHT</button>
+      <button aria-label="Reverse" {...touchControl('ArrowDown')}>BACK</button>
+      <button aria-label="Brake" {...touchControl(' ')}>BRAKE</button>
     </div>
     <nav className="drive-destinations" aria-label="Portfolio destinations">{stops.map((item) => <button key={item.id} onClick={() => { const event = new CustomEvent('drive-destination', { detail: item }); window.dispatchEvent(event); }}>{item.label}</button>)}</nav>
   </main>;
