@@ -116,8 +116,22 @@ export default function Drive() {
         oscillator.connect(voiceGain); voiceGain.connect(filter); oscillator.start();
         return { oscillator, ratio };
       });
+      // Create rain only after a user enables audio, as required by browser autoplay rules.
+      const rainBuffer = audio.createBuffer(1, audio.sampleRate * 2, audio.sampleRate);
+      const rainSamples = rainBuffer.getChannelData(0);
+      for (let i = 0; i < rainSamples.length; i += 1) rainSamples[i] = Math.random() * 2 - 1;
+      const rainSource = audio.createBufferSource();
+      rainSource.buffer = rainBuffer;
+      rainSource.loop = true;
+      const rainFilter = audio.createBiquadFilter();
+      rainFilter.type = 'lowpass';
+      rainFilter.frequency.value = 1200;
+      const rainGain = audio.createGain();
+      rainGain.gain.value = 0;
+      rainSource.connect(rainFilter); rainFilter.connect(rainGain); rainGain.connect(audio.destination);
+      rainSource.start();
       audioRef.current = audio;
-      engineRef.current = { voices, filter, gain };
+      engineRef.current = { voices, filter, gain, rainSource, rainGain };
     }
     try { await audioRef.current.resume(); setMuted((value) => !value); }
     catch { setToast('Could not start sound. Please try again.'); }
@@ -125,6 +139,7 @@ export default function Drive() {
 
   useEffect(() => () => {
     engineRef.current?.voices.forEach(({ oscillator }) => oscillator.stop());
+    engineRef.current?.rainSource.stop();
     audioRef.current?.close();
     engineRef.current = null;
     audioRef.current = null;
@@ -735,6 +750,7 @@ export default function Drive() {
         clearControls();
         velocity = 0;
         if (engineRef.current && audioRef.current) engineRef.current.gain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.05);
+        if (engineRef.current && audioRef.current) engineRef.current.rainGain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.05);
       } else {
         previous = 0;
       }
@@ -849,6 +865,7 @@ export default function Drive() {
         clearControls();
         velocity = 0;
         if (engineRef.current && audioRef.current) engineRef.current.gain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.05);
+        if (engineRef.current && audioRef.current) engineRef.current.rainGain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.05);
       }
     });
     intersection.observe(canvas);
@@ -880,6 +897,7 @@ export default function Drive() {
       if (settingsRef.current.paused) {
         clearControls();
         if (engineRef.current && audioRef.current) engineRef.current.gain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.08);
+        if (engineRef.current && audioRef.current) engineRef.current.rainGain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.08);
         if (settingsRef.current.photoMode) {
           const photo = settingsRef.current.photoCamera;
           camera.position.set(car.position.x + Math.sin(photo.angle) * photo.distance, car.position.y + photo.height, car.position.z + Math.cos(photo.angle) * photo.distance);
@@ -1203,6 +1221,7 @@ export default function Drive() {
         engineRef.current.voices.forEach(({ oscillator, ratio }) => oscillator.frequency.setTargetAtTime(frequency * ratio, audioRef.current.currentTime, 0.15));
         engineRef.current.filter.frequency.setTargetAtTime(320 + revs * 430, audioRef.current.currentTime, 0.15);
         engineRef.current.gain.gain.setTargetAtTime(settingsRef.current.muted ? 0 : 0.055 + revs * 0.035, audioRef.current.currentTime, 0.15);
+        engineRef.current.rainGain.gain.setTargetAtTime(!settingsRef.current.muted && weatherMode === 'rain' ? 0.035 : 0, audioRef.current.currentTime, 0.3);
       }
       if (now - speedUpdateAt > 120) {
         speedUpdateAt = now;
