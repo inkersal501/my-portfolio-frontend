@@ -28,6 +28,7 @@ export default function Drive() {
   const canvasRef = useRef(null);
   const [activeStop, setActiveStop] = useState(null);
   const [speed, setSpeed] = useState(0);
+  const [gear, setGear] = useState(1);
   const [collected, setCollected] = useState(0);
   const [unlocked, setUnlocked] = useState(0);
   const [destinationMeters, setDestinationMeters] = useState(null);
@@ -223,6 +224,8 @@ export default function Drive() {
     const pointer = { down: false, x: 0 };
     let touchSteer = 0;
     let velocity = 0;
+    let currentGear = 1;
+    const gearLimits = [0, 5, 7, 9, 11, 14];
     let steer = 0;
     let yaw = 0;
     let crashCooldown = 0;
@@ -231,14 +234,16 @@ export default function Drive() {
     let frame;
     let visible = true;
     let previous = 0;
-    const keydown = (event) => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); keys.add(event.key.toLowerCase()); if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(event.key.toLowerCase())) targetStop = null; };
+    const shift = (amount) => { currentGear = THREE.MathUtils.clamp(currentGear + amount, 1, 5); setGear(currentGear); };
+    const onShift = (event) => shift(event.detail);
+    const keydown = (event) => { const key = event.key.toLowerCase(); if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && (key === 'q' || key === 'e')) shift(key === 'e' ? 1 : -1); keys.add(key); if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) targetStop = null; };
     const keyup = (event) => keys.delete(event.key.toLowerCase());
     const pointerdown = (event) => { pointer.down = true; pointer.x = event.clientX; canvas.setPointerCapture(event.pointerId); };
     const pointermove = (event) => { if (pointer.down) { touchSteer = THREE.MathUtils.clamp((event.clientX - canvas.getBoundingClientRect().left) / canvas.clientWidth * 2 - 1, -1, 1); pointer.x = event.clientX; } };
     const pointerup = () => { pointer.down = false; };
     let targetStop = null;
     const onDestination = (event) => { targetStop = event.detail; };
-    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; targetStop = null; };
+    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; targetStop = null; currentGear = 1; setGear(1); };
     const onQualityChange = () => resize();
     const playPickup = () => {
       if (settingsRef.current.muted || !audioRef.current) return;
@@ -254,6 +259,7 @@ export default function Drive() {
     window.addEventListener('keyup', keyup);
     window.addEventListener('drive-destination', onDestination);
     window.addEventListener('drive-reset', resetCar);
+    window.addEventListener('drive-shift', onShift);
     window.addEventListener('drive-quality-change', onQualityChange);
     canvas.addEventListener('pointerdown', pointerdown);
     canvas.addEventListener('pointermove', pointermove);
@@ -295,8 +301,9 @@ export default function Drive() {
       const right = keys.has('d') || keys.has('arrowright');
       const direction = pointer.down ? touchSteer : Number(right) - Number(left);
       if (!targetStop) {
-        const targetVelocity = braking ? 0 : accelerating ? (settingsRef.current.handling === 'relaxed' ? 7 : 10) : reversing ? -3.5 : 0;
-        const response = braking ? 20 : (accelerating || reversing ? 7 : 3.1);
+        const gearLimit = gearLimits[currentGear];
+        const targetVelocity = braking ? 0 : accelerating ? gearLimit * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) : reversing ? -3.5 : 0;
+        const response = braking ? 12 : (accelerating || reversing ? 1.6 : 0.8);
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
       }
       const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35;
@@ -395,7 +402,7 @@ export default function Drive() {
       camera.lookAt(cameraTarget);
       renderer.render(scene, camera);
       if (engineRef.current && audioRef.current) {
-        const revs = Math.min(Math.abs(velocity) / 10, 1);
+        const revs = Math.min(Math.abs(velocity) / gearLimits[currentGear], 1);
         const frequency = 48 + revs * 72;
         engineRef.current.voices.forEach(({ oscillator, ratio }) => oscillator.frequency.setTargetAtTime(frequency * ratio, audioRef.current.currentTime, 0.15));
         engineRef.current.filter.frequency.setTargetAtTime(320 + revs * 430, audioRef.current.currentTime, 0.15);
@@ -419,6 +426,7 @@ export default function Drive() {
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('drive-destination', onDestination);
       window.removeEventListener('drive-reset', resetCar);
+      window.removeEventListener('drive-shift', onShift);
       window.removeEventListener('drive-quality-change', onQualityChange);
       canvas.removeEventListener('pointerdown', pointerdown);
       canvas.removeEventListener('pointermove', pointermove);
@@ -459,8 +467,9 @@ export default function Drive() {
       {stop.id === 'skills' && skills.map((item) => <p key={item.id}><strong>{item.category}</strong><br/>{item.skills}</p>)}
       {stop.id === 'about' && <p><a href={profile.github} target="_blank" rel="noreferrer">GitHub ↗</a> · <a href={profile.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a> · <a href={profile.leetcode} target="_blank" rel="noreferrer">LeetCode ↗</a></p>}
     </section>}
-    <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><i>Swipe to steer · collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
-    <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span></div>
+    <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>Q / E SHIFT</span><i>Swipe to steer · collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
+    <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span>GEAR {gear}</span></div>
+    <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
     <canvas className="drive-minimap" ref={minimapRef} width="140" height="140" aria-label="Nearby map" />
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
