@@ -395,6 +395,15 @@ export default function Drive() {
     const keydown = (event) => { const key = event.key.toLowerCase(); if (event.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName)) return; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && (key === 'q' || key === 'e')) shift(key === 'e' ? 1 : -1); if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; keys.add(key); };
     const keyup = (event) => keys.delete(event.key.toLowerCase());
     const clearControls = () => { keys.clear(); pointer.down = false; touchSteer = 0; };
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        clearControls();
+        velocity = 0;
+        if (engineRef.current && audioRef.current) engineRef.current.gain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.05);
+      } else {
+        previous = 0;
+      }
+    };
     const pointerdown = (event) => { pointer.down = true; pointer.x = event.clientX; canvas.setPointerCapture(event.pointerId); };
     const pointermove = (event) => { if (pointer.down) { touchSteer = THREE.MathUtils.clamp((event.clientX - canvas.getBoundingClientRect().left) / canvas.clientWidth * 2 - 1, -1, 1); pointer.x = event.clientX; } };
     const pointerup = () => { pointer.down = false; };
@@ -434,6 +443,7 @@ export default function Drive() {
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
     window.addEventListener('blur', clearControls);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('drive-destination', onDestination);
     window.addEventListener('drive-challenge', startChallenge);
     window.addEventListener('drive-reset', resetCar);
@@ -658,6 +668,7 @@ export default function Drive() {
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('blur', clearControls);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('drive-destination', onDestination);
       window.removeEventListener('drive-challenge', startChallenge);
       window.removeEventListener('drive-reset', resetCar);
