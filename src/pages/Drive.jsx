@@ -46,6 +46,9 @@ export default function Drive() {
   const challengeRef = useRef({ active: false, elapsed: 0, score: 0, best: challenge.best });
   const [showAchievements, setShowAchievements] = useState(false);
   const [routeRun, setRouteRun] = useState({ active: false, index: 0, elapsed: 0, finished: false });
+  const [routeBest, setRouteBest] = useState(() => { try { const value = Number(window.localStorage.getItem('portfolio-drive-route-best-v1')); return Number.isFinite(value) && value > 0 ? value : null; } catch { return null; } });
+  const routeBestRef = useRef(routeBest);
+  const [speedZoneMessage, setSpeedZoneMessage] = useState('');
   const [paused, setPaused] = useState(false);
   const [handling, setHandling] = useState('arcade');
   const [quality, setQuality] = useState('high');
@@ -587,6 +590,17 @@ export default function Drive() {
     checkpoint.visible = false;
     world.add(checkpoint);
 
+    const speedZone = new THREE.Group();
+    const speedZoneLine = new THREE.Mesh(new THREE.PlaneGeometry(9, 25), new THREE.MeshBasicMaterial({ color: 0xc6f36a, transparent: true, opacity: 0.12, depthWrite: false }));
+    speedZoneLine.rotation.x = -Math.PI / 2;
+    speedZoneLine.position.y = 0.025;
+    speedZone.add(speedZoneLine);
+    const speedZoneSign = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 1.1), new THREE.MeshBasicMaterial({ map: makeTextTexture('SPEED ZONE'), transparent: true, side: THREE.DoubleSide }));
+    speedZoneSign.position.set(0, 4, 11);
+    speedZone.add(speedZoneSign);
+    speedZone.position.set(0, 0, -115);
+    world.add(speedZone);
+
     const hiddenRelics = [];
     const relicGeometry = new THREE.IcosahedronGeometry(0.7, 0);
     const relicMaterial = new THREE.MeshStandardMaterial({ color: 0xc6f36a, emissive: 0x779e34, emissiveIntensity: 1.4, metalness: 0.45, roughness: 0.25 });
@@ -610,6 +624,9 @@ export default function Drive() {
     let yaw = 0;
     let crashCooldown = 0;
     let rampCooldown = 0;
+    let speedZoneTime = 0;
+    let speedZoneRewarded = false;
+    let lastSpeedZoneSecond = -1;
     let fastTurnTime = 0;
     const discovered = new Set();
     const nearbyGates = new Set();
@@ -896,6 +913,21 @@ export default function Drive() {
       previousPosition.copy(car.position);
       car.position.x += Math.sin(yaw) * velocity * delta;
       car.position.z -= Math.cos(yaw) * velocity * delta;
+      speedZone.position.z = -115 + Math.round((car.position.z + 115) / 300) * 300;
+      const inSpeedZone = Math.abs(car.position.x) < 4.5 && Math.abs(car.position.z - speedZone.position.z) < 12.5;
+      if (inSpeedZone && !speedZoneRewarded) {
+        speedZoneTime = Math.abs(velocity) * 9 >= 45 ? speedZoneTime + delta : 0;
+        const seconds = Math.min(3, Math.floor(speedZoneTime));
+        if (seconds !== lastSpeedZoneSecond) { lastSpeedZoneSecond = seconds; setSpeedZoneMessage(`SPEED ZONE · HOLD 45 KM/H · ${seconds}/3s`); }
+        if (speedZoneTime >= 3) {
+          speedZoneRewarded = true;
+          setCollected((count) => count + 3);
+          setSpeedZoneMessage('SPEED ZONE COMPLETE · +3 CRYSTALS');
+          playEffect(400, 800, 0.25);
+        }
+      } else if (!inSpeedZone && (lastSpeedZoneSecond !== -1 || speedZoneRewarded)) {
+        speedZoneTime = 0; speedZoneRewarded = false; lastSpeedZoneSecond = -1; setSpeedZoneMessage('');
+      }
       ground.position.x = Math.round(car.position.x / 150) * 150;
       ground.position.z = Math.round(car.position.z / 150) * 150;
       groundGrid.position.x = ground.position.x;
@@ -921,6 +953,11 @@ export default function Drive() {
           playPickup();
           if (route.index === route.points.length) {
             setRouteRun({ active: false, index: 5, elapsed: route.elapsed, finished: true });
+            if (routeBestRef.current === null || route.elapsed < routeBestRef.current) {
+              routeBestRef.current = route.elapsed;
+              setRouteBest(route.elapsed);
+              try { window.localStorage.setItem('portfolio-drive-route-best-v1', String(route.elapsed)); } catch { /* Keep the best for this session. */ }
+            }
             announce(`ROUTE COMPLETE · ${route.elapsed.toFixed(1)} SECONDS`, 3500);
             playEffect(440, 880, 0.3);
             setCollected((count) => count + 5);
@@ -1161,7 +1198,7 @@ export default function Drive() {
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>Q / E SHIFT</span><span>SHIFT BOOST · J JUMP</span><i>Collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span>GEAR {gear}</span></div>
     <div className="drive-challenge"><button onClick={() => window.dispatchEvent(new Event('drive-challenge'))}>{challenge.active ? 'RESTART RUN' : '60-SECOND CRYSTAL RUN'}</button><span aria-live="polite">{challenge.active ? `${60 - challenge.seconds}s · ${challenge.score} collected` : challenge.finished ? `Run: ${challenge.score} · Best: ${challenge.best}` : `Best: ${challenge.best} crystals`}</span><button onClick={() => setShowAchievements((value) => !value)} aria-expanded={showAchievements}>ACHIEVEMENTS</button></div>
-    <div className="drive-route"><button onClick={() => window.dispatchEvent(new Event('drive-route'))}>{routeRun.active ? 'RESTART ROUTE' : 'START CHECKPOINT ROUTE'}</button><span>{routeRun.active ? `GATE ${routeRun.index + 1} / 5 · ${routeRun.elapsed.toFixed(1)}s` : routeRun.finished ? `COMPLETE · ${routeRun.elapsed.toFixed(1)}s · +5 CRYSTALS` : '5 GATES · +5 CRYSTALS'}</span></div>
+    <div className="drive-route"><button onClick={() => window.dispatchEvent(new Event('drive-route'))}>{routeRun.active ? 'RESTART ROUTE' : 'START CHECKPOINT ROUTE'}</button><span>{routeRun.active ? `GATE ${routeRun.index + 1} / 5 · ${routeRun.elapsed.toFixed(1)}s` : routeRun.finished ? `COMPLETE · ${routeRun.elapsed.toFixed(1)}s · +5 CRYSTALS` : '5 GATES · +5 CRYSTALS'}{routeBest !== null ? ` · BEST ${routeBest.toFixed(1)}s` : ''}</span></div>
     <div className="drive-world-menu"><button onClick={() => setShowMissions((value) => !value)} aria-expanded={showMissions}>MISSIONS</button><button onClick={() => setShowGarage(true)}>GARAGE</button><button onClick={() => { setShowStory(true); openStoryStep(0); }}>JOURNEY</button><button onClick={() => setPhotoMode(true)}>PHOTO</button></div>
     {showStory && <section className="drive-world-panel drive-story" aria-label="Developer journey"><button className="drive-panel-close" onClick={() => setShowStory(false)} aria-label="Close developer journey">×</button><small>DEVELOPER JOURNEY · {Math.round(storyVisited.length / storyPages.length * 100)}% EXPLORED</small><h2>{storyPages[storyStep].title}</h2><p>{storyPages[storyStep].text}</p>{storyStep === 3 && projects.map((project) => <p key={project.id}><a href={project.link} target="_blank" rel="noreferrer"><strong>{project.title} ↗</strong></a><span>{project.tech}</span></p>)}{storyStep === 4 && experience.map((item) => <p key={item.id}><strong>{item.role} · {item.company}</strong><span>{item.duration}</span></p>)}<div className="drive-story-actions"><button disabled={storyStep === 0} onClick={() => openStoryStep(storyStep - 1)}>PREVIOUS</button><span>{storyStep + 1} / {storyPages.length}</span><button disabled={storyStep === storyPages.length - 1} onClick={() => openStoryStep(storyStep + 1)}>NEXT</button></div></section>}
     {photoMode && <section className="drive-photo-panel" aria-label="Photo mode controls"><strong>PHOTO MODE</strong><label>ANGLE <input type="range" min={-3.14} max={3.14} step={0.05} value={photoCamera.angle} onChange={(event) => setPhotoCamera((value) => ({ ...value, angle: Number(event.target.value) }))} /></label><label>DISTANCE <input type="range" min={4} max={20} step={0.5} value={photoCamera.distance} onChange={(event) => setPhotoCamera((value) => ({ ...value, distance: Number(event.target.value) }))} /></label><label>HEIGHT <input type="range" min={1.5} max={14} step={0.5} value={photoCamera.height} onChange={(event) => setPhotoCamera((value) => ({ ...value, height: Number(event.target.value) }))} /></label><div><button onClick={() => window.dispatchEvent(new Event('drive-photo'))}>SAVE IMAGE</button><button onClick={() => setPhotoCamera({ angle: 0, distance: 9, height: 5 })}>RESET CAMERA</button><button onClick={() => setPhotoMode(false)}>BACK TO DRIVE</button></div></section>}
@@ -1171,6 +1208,7 @@ export default function Drive() {
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>TIME <select value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value)}><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option><option value="auto">Cycle</option></select></label><label>WEATHER <select value={weather} onChange={(event) => setWeather(event.target.value)}><option value="clear">Clear</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
+    {speedZoneMessage && <div className="drive-speed-zone" role="status">{speedZoneMessage}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
       <button aria-label="Steer left" {...touchControl('ArrowLeft')}>LEFT</button>
       <button aria-label="Accelerate" {...touchControl('ArrowUp')}>GO</button>
