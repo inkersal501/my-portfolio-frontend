@@ -33,6 +33,7 @@ export default function Drive() {
   const [collected, setCollected] = useState(0);
   const [unlocked, setUnlocked] = useState(0);
   const [destinationMeters, setDestinationMeters] = useState(null);
+  const [guidance, setGuidance] = useState(null);
   const [toast, setToast] = useState('');
   const [challenge, setChallenge] = useState({ active: false, seconds: 0, score: 0, best: 0 });
   const challengeRef = useRef({ active: false, elapsed: 0, score: 0, best: 0 });
@@ -364,7 +365,7 @@ export default function Drive() {
     let previous = 0;
     const shift = (amount) => { currentGear = THREE.MathUtils.clamp(currentGear + amount, 1, 5); setGear(currentGear); };
     const onShift = (event) => shift(event.detail);
-    const keydown = (event) => { const key = event.key.toLowerCase(); if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && (key === 'q' || key === 'e')) shift(key === 'e' ? 1 : -1); if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; keys.add(key); if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) targetStop = null; };
+    const keydown = (event) => { const key = event.key.toLowerCase(); if (event.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName)) return; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && (key === 'q' || key === 'e')) shift(key === 'e' ? 1 : -1); if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; keys.add(key); };
     const keyup = (event) => keys.delete(event.key.toLowerCase());
     const clearControls = () => { keys.clear(); pointer.down = false; touchSteer = 0; };
     const pointerdown = (event) => { pointer.down = true; pointer.x = event.clientX; canvas.setPointerCapture(event.pointerId); };
@@ -372,12 +373,13 @@ export default function Drive() {
     const pointerup = () => { pointer.down = false; };
     let targetStop = null;
     const onDestination = (event) => {
+      if (!event.detail) { targetStop = null; setGuidance(null); return; }
       const index = stops.findIndex((item) => item.id === event.detail.id);
       const gate = gateObjects[index];
       if (gate) targetStop = { ...event.detail, x: gate.position.x, z: gate.position.z };
     };
     const startChallenge = () => { challengeRef.current = { active: true, elapsed: 0, score: 0, best: challengeRef.current.best }; setChallenge({ active: true, seconds: 0, score: 0, best: challengeRef.current.best }); };
-    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; currentGear = 1; setGear(1); };
+    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; setGuidance(null); currentGear = 1; setGear(1); };
     const onQualityChange = () => resize();
     const playPickup = () => {
       if (settingsRef.current.muted || !audioRef.current) return;
@@ -459,24 +461,13 @@ export default function Drive() {
       const left = keys.has('a') || keys.has('arrowleft');
       const right = keys.has('d') || keys.has('arrowright');
       const direction = pointer.down ? touchSteer : Number(right) - Number(left);
-      if (!targetStop) {
         const gearLimit = gearLimits[currentGear];
         const targetVelocity = braking ? 0 : accelerating ? gearLimit * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
         const response = braking ? 12 : (accelerating || reversing ? 1.6 : 0.8);
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
-      }
       const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35;
       if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, 7);
       steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 10 : 12, delta);
-      if (targetStop) {
-        const dx = targetStop.x - car.position.x;
-        const dz = targetStop.z - car.position.z;
-        const desiredYaw = Math.atan2(dx, -dz);
-        const yawError = THREE.MathUtils.euclideanModulo(desiredYaw - yaw + Math.PI, Math.PI * 2) - Math.PI;
-        steer = THREE.MathUtils.clamp(yawError * 1.8, -1, 1);
-        velocity = THREE.MathUtils.damp(velocity, Math.min(8, Math.hypot(dx, dz) * 0.55), 2.8, delta);
-        if (Math.hypot(dx, dz) < 3) { setActiveStop(targetStop.id); targetStop = null; velocity = 0; }
-      }
       const grip = settingsRef.current.handling === 'relaxed' ? 1.4 : THREE.MathUtils.lerp(0.95, 0.53, Math.min(Math.abs(velocity) / 10, 1));
       yaw += steer * velocity * delta * grip;
       yaw = THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI;
@@ -487,7 +478,7 @@ export default function Drive() {
       car.rotation.y = -yaw;
       car.rotation.z = -steer * Math.min(Math.abs(velocity) / 12, 1) * 0.055;
       if (jumpSpeed !== 0 || jumpHeight > 0) { jumpSpeed -= 18 * delta; jumpHeight += jumpSpeed * delta; if (jumpHeight <= 0) { jumpHeight = 0; jumpSpeed = 0; } }
-      car.position.y = jumpHeight + (jumpHeight === 0 && Math.abs(velocity) > 0.5 ? Math.sin(now * 0.012) * 0.025 : 0);
+      car.position.y = jumpHeight + (!reducedMotion.matches && jumpHeight === 0 && Math.abs(velocity) > 0.5 ? Math.sin(now * 0.012) * 0.025 : 0);
       wheels.forEach((wheel) => { wheel.rotation.x -= velocity * delta * 1.7; });
       ramp.position.z += Math.round((car.position.z - ramp.position.z) / 240) * 240;
       ramp.position.x += Math.round((car.position.x - ramp.position.x) / 240) * 240;
@@ -570,8 +561,8 @@ export default function Drive() {
           const lap = Math.round((car.position.z - pickup.mesh.position.z) / 220) * 220;
           pickup.mesh.position.z += lap;
           pickup.mesh.position.x += Math.round((car.position.x - pickup.mesh.position.x) / 220) * 220;
-          pickup.mesh.rotation.y += delta * 1.8;
-          pickup.mesh.position.y = 0.65 + Math.sin(now * 0.003 + pickup.mesh.position.z) * 0.12;
+          if (!reducedMotion.matches) pickup.mesh.rotation.y += delta * 1.8;
+          pickup.mesh.position.y = reducedMotion.matches ? 0.65 : 0.65 + Math.sin(now * 0.003 + pickup.mesh.position.z) * 0.12;
           if (Math.hypot(car.position.x - pickup.mesh.position.x, car.position.z - pickup.mesh.position.z) < 1.1) {
           pickup.found = true;
           pickup.mesh.visible = false;
@@ -589,7 +580,7 @@ export default function Drive() {
       if (targetStop) {
         const dx = targetStop.x - car.position.x;
         const dz = targetStop.z - car.position.z;
-        if (Math.hypot(dx, dz) < 2) { setActiveStop(targetStop.id); targetStop = null; }
+        if (Math.hypot(dx, dz) < 3) { setActiveStop(targetStop.id); targetStop = null; setGuidance(null); }
       }
       obstacles.forEach((item) => {
         const lapX = Math.round((car.position.x - item.x) / 360) * 360;
@@ -617,6 +608,11 @@ export default function Drive() {
         speedUpdateAt = now;
         setSpeed(Math.round(Math.abs(velocity) * 9));
         setDestinationMeters(targetStop ? Math.round(Math.hypot(targetStop.x - car.position.x, targetStop.z - car.position.z)) : null);
+        if (targetStop) {
+          const angle = Math.atan2(targetStop.x - car.position.x, -(targetStop.z - car.position.z));
+          const turn = THREE.MathUtils.euclideanModulo(angle - yaw + Math.PI, Math.PI * 2) - Math.PI;
+          setGuidance({ label: targetStop.label, direction: Math.abs(turn) > 2.5 ? 'TURN AROUND' : turn > 0.35 ? 'TURN RIGHT' : turn < -0.35 ? 'TURN LEFT' : 'STRAIGHT AHEAD' });
+        }
         if (challengeRef.current.active) { const game = challengeRef.current; setChallenge({ active: true, seconds: Math.floor(game.elapsed), score: game.score, best: game.best }); }
       }
       frame = requestAnimationFrame(animate);
@@ -661,6 +657,7 @@ export default function Drive() {
     <a className="drive-back" href="/">IM<span>.</span> <small>BACK TO PORTFOLIO</small></a>
     <div className="drive-heading"><span>INKERSAL MAHENDRAN</span><h1>DRIVE TO<br/><em>EXPLORE.</em></h1><p>Full-stack engineer · Chennai, India</p></div>
     <div className="drive-hud"><span className="drive-live"/> OPEN WORLD <span>{String(unlocked).padStart(2, '0')} / {String(stops.length).padStart(2, '0')} STOPS</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
+    {guidance && <div className="drive-guidance" role="status"><span>{guidance.label} · {destinationMeters} M</span><strong>{guidance.direction}</strong><button onClick={() => window.dispatchEvent(new CustomEvent('drive-destination', { detail: null }))}>CLEAR</button></div>}
     {stop && <section className="drive-card"><button onClick={() => setActiveStop(null)} aria-label="Close destination">×</button><small>{stop.label}</small><h2>{stop.title}</h2>
       {stop.id === 'about' && about.map((text) => <p key={text}>{text}</p>)}
       {stop.id === 'experience' && experience.map((item) => <p key={item.id}><strong>{item.role} · {item.company}</strong><br/>{item.duration}<br/>{item.contribution}</p>)}
@@ -684,6 +681,6 @@ export default function Drive() {
       <button aria-label="Boost" {...touchControl('Shift')}>BOOST</button>
       <button aria-label="Jump" {...touchControl('j')}>JUMP</button>
     </div>
-    <nav className="drive-destinations" aria-label="Portfolio destinations">{stops.map((item) => <button key={item.id} onClick={() => { const event = new CustomEvent('drive-destination', { detail: item }); window.dispatchEvent(event); }}>{item.label}</button>)}</nav>
+    <nav className="drive-destinations" aria-label="Choose a destination for driving directions">{stops.map((item) => <button key={item.id} aria-pressed={guidance?.label === item.label} onClick={() => { const event = new CustomEvent('drive-destination', { detail: item }); window.dispatchEvent(event); }}>{item.label}</button>)}</nav>
   </main>;
 }
