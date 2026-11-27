@@ -72,9 +72,9 @@ export default function Drive() {
   const [photoCamera, setPhotoCamera] = useState({ angle: 0, distance: 9, height: 5 });
   const [garage, setGarage] = useState(() => {
     try {
-      const saved = JSON.parse(window.localStorage.getItem('portfolio-drive-garage-v1') || window.localStorage.getItem('portfolio-drive-garage') || '{}');
-      return { vehicle: ['sport', 'suv', 'supercar'].includes(saved.vehicle) ? saved.vehicle : 'sport', paint: ['#c6f36a', '#e9e8e4', '#789876', '#343f35'].includes(saved.paint) ? saved.paint : '#c6f36a', wheels: ['#9ba893', '#202620', '#c6f36a'].includes(saved.wheels) ? saved.wheels : '#9ba893' };
-    } catch { return { vehicle: 'sport', paint: '#c6f36a', wheels: '#9ba893' }; }
+      const saved = JSON.parse(window.localStorage.getItem('portfolio-drive-garage-v2') || window.localStorage.getItem('portfolio-drive-garage-v1') || '{}');
+      return { vehicle: saved.version === 2 && ['xuv700', 'sport', 'suv', 'supercar'].includes(saved.vehicle) ? saved.vehicle : 'xuv700', paint: ['#c6f36a', '#e9e8e4', '#789876', '#343f35'].includes(saved.paint) ? saved.paint : '#c6f36a', wheels: ['#9ba893', '#202620', '#c6f36a'].includes(saved.wheels) ? saved.wheels : '#9ba893' };
+    } catch { return { vehicle: 'xuv700', paint: '#c6f36a', wheels: '#9ba893' }; }
   });
   const [progress, setProgress] = useState(() => {
     try {
@@ -95,7 +95,7 @@ export default function Drive() {
   const settingsRef = useRef({ paused, handling, quality, muted, garage, timeOfDay, weather, photoMode, photoCamera });
   settingsRef.current = { paused: paused || showGarage || showTutorial || photoMode || showStory, handling, quality, muted, garage, timeOfDay, weather, photoMode, photoCamera, showGarage };
 
-  useEffect(() => { try { window.localStorage.setItem('portfolio-drive-garage-v1', JSON.stringify({ version: 1, ...garage })); } catch { /* Keep settings for this visit. */ } }, [garage]);
+  useEffect(() => { try { window.localStorage.setItem('portfolio-drive-garage-v2', JSON.stringify({ version: 2, ...garage })); } catch { /* Keep settings for this visit. */ } }, [garage]);
   useEffect(() => { try { window.localStorage.setItem('portfolio-drive-story-v1', JSON.stringify(storyVisited)); } catch { /* Story remains available for this visit. */ } }, [storyVisited]);
 
   const toggleSound = async () => {
@@ -277,6 +277,32 @@ export default function Drive() {
     spare.position.set(0, 0.82, 1.08);
     suvDetails.add(suvBumper, spare);
     car.add(suvDetails);
+    // Low-poly XUV700-inspired exterior: upright grille, DRLs, roof rails and side glazing.
+    const xuvDetails = new THREE.Group();
+    const xuvDark = new THREE.MeshStandardMaterial({ color: 0x171e19, metalness: 0.3, roughness: 0.48 });
+    const xuvTrim = new THREE.MeshStandardMaterial({ color: 0x9da99b, metalness: 0.65, roughness: 0.35 });
+    const xuvLights = new THREE.MeshBasicMaterial({ color: 0xe9ffdf });
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.28, 0.08), xuvDark);
+    grille.position.set(0, 0.58, -1.065);
+    xuvDetails.add(grille);
+    const slatGeometry = new THREE.BoxGeometry(0.035, 0.22, 0.015);
+    for (let i = -3; i <= 3; i += 1) {
+      const slat = new THREE.Mesh(slatGeometry, xuvTrim);
+      slat.position.set(i * 0.105, 0.58, -1.115);
+      xuvDetails.add(slat);
+    }
+    for (const side of [-1, 1]) {
+      const drl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.035), xuvLights);
+      drl.position.set(side * 0.59, 0.64, -1.08);
+      const upperLight = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.055, 0.035), xuvLights);
+      upperLight.position.set(side * 0.45, 0.77, -1.08);
+      const sideWindow = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.27, 1.05), xuvDark);
+      sideWindow.position.set(side * 0.53, 1.09, 0);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 1.15), xuvTrim);
+      rail.position.set(side * 0.45, 1.42, 0);
+      xuvDetails.add(drl, upperLight, sideWindow, rail);
+    }
+    car.add(xuvDetails);
     const boostGlow = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xc6f36a, transparent: true, opacity: 0.8 }));
     boostGlow.rotation.x = Math.PI / 2;
     boostGlow.position.set(0, 0.48, 1.48);
@@ -879,14 +905,16 @@ export default function Drive() {
         body.material.color.set(chosenGarage.paint);
         hood.material.color.set(chosenGarage.paint);
         hubMaterial.color.set(chosenGarage.wheels);
-        const suv = chosenGarage.vehicle === 'suv';
+        const xuv = chosenGarage.vehicle === 'xuv700';
+        const suv = chosenGarage.vehicle === 'suv' || xuv;
         const supercar = chosenGarage.vehicle === 'supercar';
         body.scale.set(suv ? 1.1 : supercar ? 1.2 : 1, suv ? 1.45 : supercar ? 0.72 : 1, suv ? 0.9 : supercar ? 1.15 : 1);
         cabin.scale.set(suv ? 1.1 : supercar ? 0.92 : 1, suv ? 1.3 : supercar ? 0.72 : 1, suv ? 1.25 : supercar ? 0.9 : 1);
         cabin.position.y = suv ? 1.08 : supercar ? 0.88 : 0.97;
         roofRack.position.y = suv ? 0.2 : 0;
         roofRack.visible = suv;
-        suvDetails.visible = suv;
+        suvDetails.visible = suv && !xuv;
+        xuvDetails.visible = xuv;
         spoiler.visible = !suv;
         spoiler.scale.set(supercar ? 1.15 : 1, 1, supercar ? 1.5 : 1);
         wheels.forEach((wheel) => wheel.scale.setScalar(suv ? 1.2 : 1));
@@ -974,13 +1002,13 @@ export default function Drive() {
         if (distance > 8 && !approachingSignal) vehicle.position.z += travel * 3.5 * delta;
         if (Math.abs(vehicle.position.z - car.position.z) > 125) vehicle.position.z = car.position.z - travel * 110;
       });
-        const vehicleSpeed = settingsRef.current.garage.vehicle === 'suv' ? 0.82 : settingsRef.current.garage.vehicle === 'supercar' ? 1.18 : 1;
+        const vehicleSpeed = ['suv', 'xuv700'].includes(settingsRef.current.garage.vehicle) ? 0.82 : settingsRef.current.garage.vehicle === 'supercar' ? 1.18 : 1;
         const targetVelocity = braking ? 0 : accelerating ? 12 * vehicleSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
         const response = braking ? 12 : (accelerating || reversing ? 1.6 : 0.8);
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
       const onDistrictRoad = districtLandmarks.some(({ mesh }, index) => Math.abs(car.position.x - (mesh.position.x + (index % 2 ? -7 : 7))) < 8 && Math.abs(car.position.z - (mesh.position.z + 12)) < 3);
       const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35 && !onDistrictRoad;
-      if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, settingsRef.current.garage.vehicle === 'suv' ? 9 : 7);
+      if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, ['suv', 'xuv700'].includes(settingsRef.current.garage.vehicle) ? 9 : 7);
       steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 10 : 12, delta);
       if (!progressRef.current.drift) {
         fastTurnTime = velocity > 4 && Math.abs(steer) > 0.6 && jumpHeight === 0 ? fastTurnTime + delta : 0;
@@ -1308,7 +1336,7 @@ export default function Drive() {
     {showStory && <section className="drive-world-panel drive-story" aria-label="Developer journey"><button className="drive-panel-close" onClick={() => setShowStory(false)} aria-label="Close developer journey">×</button><small>DEVELOPER JOURNEY · {Math.round(storyVisited.length / storyPages.length * 100)}% EXPLORED</small><h2>{storyPages[storyStep].title}</h2><p>{storyPages[storyStep].text}</p>{storyStep === 3 && projects.map((project) => <p key={project.id}><a href={project.link} target="_blank" rel="noreferrer"><strong>{project.title} ↗</strong></a><span>{project.tech}</span></p>)}{storyStep === 4 && experience.map((item) => <p key={item.id}><strong>{item.role} · {item.company}</strong><span>{item.duration}</span></p>)}{storyStep === 5 && <p><a href={`mailto:${profile.email}`}>{profile.email} ↗</a><br/><a href={profile.github} target="_blank" rel="noreferrer">GitHub ↗</a><br/><a href={profile.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a></p>}<div className="drive-story-actions"><button disabled={storyStep === 0} onClick={() => openStoryStep(storyStep - 1)}>PREVIOUS</button><span>{storyStep + 1} / {storyPages.length}</span><button disabled={storyStep === storyPages.length - 1} onClick={() => openStoryStep(storyStep + 1)}>NEXT</button></div></section>}
     {photoMode && <section className="drive-photo-panel" aria-label="Photo mode controls"><strong>PHOTO MODE</strong><label>ANGLE <input type="range" min={-3.14} max={3.14} step={0.05} value={photoCamera.angle} onChange={(event) => setPhotoCamera((value) => ({ ...value, angle: Number(event.target.value) }))} /></label><label>DISTANCE <input type="range" min={4} max={20} step={0.5} value={photoCamera.distance} onChange={(event) => setPhotoCamera((value) => ({ ...value, distance: Number(event.target.value) }))} /></label><label>HEIGHT <input type="range" min={1.5} max={14} step={0.5} value={photoCamera.height} onChange={(event) => setPhotoCamera((value) => ({ ...value, height: Number(event.target.value) }))} /></label><div><button onClick={() => window.dispatchEvent(new Event('drive-photo'))}>SAVE IMAGE</button><button onClick={() => setPhotoCamera({ angle: 0, distance: 9, height: 5 })}>RESET CAMERA</button><button onClick={() => setPhotoMode(false)}>BACK TO DRIVE</button></div></section>}
     {showMissions && <section className="drive-world-panel drive-missions" aria-label="Missions"><button className="drive-panel-close" onClick={() => setShowMissions(false)} aria-label="Close missions">×</button><small>EXPLORER LEVEL {Math.floor(progress.xp / 150) + 1} · {progress.xp} XP</small><h2>Your missions</h2>{MISSIONS.map((mission) => { const count = ['route', 'speed', 'drift'].includes(mission.id) ? Number(progress[mission.id]) : progress[mission.id].length; const complete = progress.completed.includes(mission.id); return <p key={mission.id}><strong>{complete ? '✓ ' : ''}{mission.label}</strong><span>{Math.min(count, mission.target)} / {mission.target} · {complete ? 'COMPLETE' : `+${mission.reward} XP`}</span></p>; })}<small>Progress is saved in this browser.</small><button className="drive-reset-progress" onClick={() => { if (!window.confirm("Reset mission progress and XP? Your crystal run best will be kept.")) return; const fresh = initialProgress(); progressRef.current = fresh; setProgress(fresh); window.dispatchEvent(new Event("drive-reset-progress")); try { window.localStorage.setItem("portfolio-drive-progress-v1", JSON.stringify(fresh)); } catch { /* Continue without persistence. */ } }}>RESET MISSION PROGRESS</button></section>}
-    {showGarage && <section className="drive-world-panel drive-garage" aria-label="Garage"><button className="drive-panel-close" onClick={() => setShowGarage(false)} aria-label="Close garage">×</button><small>YOUR GARAGE · GAME PAUSED</small><h2>Choose your ride</h2><div className="drive-garage-options"><button aria-pressed={garage.vehicle === 'sport'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'sport' }))}>SPORT <small>Faster on roads</small></button><button aria-pressed={garage.vehicle === 'suv'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'suv' }))}>SUV <small>Better off-road</small></button><button aria-pressed={garage.vehicle === 'supercar'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'supercar' }))}>SUPERCAR <small>Higher road speed</small></button></div><label>PAINT <select value={garage.paint} onChange={(event) => setGarage((value) => ({ ...value, paint: event.target.value }))}><option value="#c6f36a">Lime</option><option value="#e9e8e4">Ivory</option><option value="#789876">Sage</option><option value="#343f35">Graphite</option></select></label><label>WHEELS <select value={garage.wheels} onChange={(event) => setGarage((value) => ({ ...value, wheels: event.target.value }))}><option value="#9ba893">Silver</option><option value="#202620">Black</option><option value="#c6f36a">Lime</option></select></label><button className="drive-garage-done" onClick={() => setShowGarage(false)}>BACK TO DRIVING</button></section>}
+    {showGarage && <section className="drive-world-panel drive-garage" aria-label="Garage"><button className="drive-panel-close" onClick={() => setShowGarage(false)} aria-label="Close garage">×</button><small>YOUR GARAGE · GAME PAUSED</small><h2>Choose your ride</h2><div className="drive-garage-options"><button aria-pressed={garage.vehicle === 'xuv700'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'xuv700' }))}>XUV700 <small>SUV-inspired</small></button><button aria-pressed={garage.vehicle === 'sport'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'sport' }))}>SPORT <small>Faster on roads</small></button><button aria-pressed={garage.vehicle === 'suv'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'suv' }))}>SUV <small>Better off-road</small></button><button aria-pressed={garage.vehicle === 'supercar'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'supercar' }))}>SUPERCAR <small>Higher road speed</small></button></div><label>PAINT <select value={garage.paint} onChange={(event) => setGarage((value) => ({ ...value, paint: event.target.value }))}><option value="#c6f36a">Lime</option><option value="#e9e8e4">Ivory</option><option value="#789876">Sage</option><option value="#343f35">Graphite</option></select></label><label>WHEELS <select value={garage.wheels} onChange={(event) => setGarage((value) => ({ ...value, wheels: event.target.value }))}><option value="#9ba893">Silver</option><option value="#202620">Black</option><option value="#c6f36a">Lime</option></select></label><button className="drive-garage-done" onClick={() => setShowGarage(false)}>BACK TO DRIVING</button></section>}
     {showAchievements && <section className="drive-achievements" aria-label="Achievements"><button onClick={() => setShowAchievements(false)} aria-label="Close achievements">×</button><h2>Milestones</h2><p>{collected >= 1 ? '✓' : '○'} First crystal <small>Collect a crystal</small></p><p>{collected >= 10 ? '✓' : '○'} Crystal hunter <small>Collect 10 crystals this visit</small></p><p>{unlocked >= stops.length ? '✓' : '○'} Explorer <small>Visit all {stops.length} destinations</small></p><p>{challenge.best >= 5 ? '✓' : '○'} Fast collector <small>Collect 5 crystals in one run</small></p><p>{stuntBest >= 2 ? '✓' : '○'} Air time <small>Best jump: {stuntBest.toFixed(1)} m</small></p><small>Run and jump bests are saved in this browser. Visit achievements reset when the page reloads.</small></section>}
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>TIME <select value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value)}><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option><option value="auto">Cycle</option></select></label><label>WEATHER <select value={weather} onChange={(event) => setWeather(event.target.value)}><option value="clear">Clear</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={() => setShowTutorial(true)}>CONTROLS</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
