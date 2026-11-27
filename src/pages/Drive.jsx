@@ -39,8 +39,9 @@ export default function Drive() {
   const [webglError, setWebglError] = useState(false);
   const [position, setPosition] = useState({ x: 0, z: 0, heading: 0 });
   const minimapRef = useRef(null);
-  const settingsRef = useRef({ paused, handling, quality });
-  settingsRef.current = { paused, handling, quality };
+  const audioRef = useRef(null);
+  const settingsRef = useRef({ paused, handling, quality, muted });
+  settingsRef.current = { paused, handling, quality, muted };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -184,10 +185,22 @@ export default function Drive() {
     let targetStop = null;
     const onDestination = (event) => { targetStop = event.detail; };
     const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; targetStop = null; };
+    const onQualityChange = () => resize();
+    const playPickup = () => {
+      if (settingsRef.current.muted || !audioRef.current) return;
+      const audio = audioRef.current;
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(740, audio.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(1180, audio.currentTime + 0.11);
+      gain.gain.setValueAtTime(0.12, audio.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.18);
+      oscillator.connect(gain); gain.connect(audio.destination); oscillator.start(); oscillator.stop(audio.currentTime + 0.18);
+    };
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
     window.addEventListener('drive-destination', onDestination);
     window.addEventListener('drive-reset', resetCar);
+    window.addEventListener('drive-quality-change', onQualityChange);
     canvas.addEventListener('pointerdown', pointerdown);
     canvas.addEventListener('pointermove', pointermove);
     canvas.addEventListener('pointerup', pointerup);
@@ -293,6 +306,7 @@ export default function Drive() {
           pickup.mesh.position.set(car.position.x + (Math.random() - 0.5) * 8, 0.65, resetAt);
           window.setTimeout(() => { pickup.found = false; pickup.mesh.visible = true; }, 1800);
             setCollected((count) => count + 1);
+            playPickup();
             setToast('NICE PICKUP!');
             window.setTimeout(() => setToast(''), 1000);
           }
@@ -334,6 +348,7 @@ export default function Drive() {
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('drive-destination', onDestination);
       window.removeEventListener('drive-reset', resetCar);
+      window.removeEventListener('drive-quality-change', onQualityChange);
       canvas.removeEventListener('pointerdown', pointerdown);
       canvas.removeEventListener('pointermove', pointermove);
       canvas.removeEventListener('pointerup', pointerup);
@@ -376,7 +391,7 @@ export default function Drive() {
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><i>Swipe to steer · collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span></div>
     <canvas className="drive-minimap" ref={minimapRef} width="140" height="140" aria-label="Nearby map" />
-    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => setQuality(event.target.value)}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={() => setMuted((value) => !value)}>{muted ? 'SOUND OFF' : 'SOUND ON'}</button></div>
+    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={async () => { if (!audioRef.current) { const AudioContextType = window.AudioContext || window.webkitAudioContext; if (AudioContextType) audioRef.current = new AudioContextType(); } await audioRef.current?.resume(); setMuted((value) => !value); }}>{muted ? 'SOUND OFF' : 'SOUND ON'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
       <button aria-label="Steer left" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }}>LEFT</button>
