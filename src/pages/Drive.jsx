@@ -127,14 +127,34 @@ export default function Drive() {
       const baseZ = z;
       const height = 1.5 + Math.random() * 5;
       const width = 1.5 + Math.random() * 3;
-      const material = new THREE.MeshStandardMaterial({ color: [0x343b30, 0x454a3a, 0x29392e][i % 3], roughness: 0.8 });
+      const district = Math.floor(Math.abs(cellZ) / 90) % 3;
+      const palettes = [[0x343b30, 0x454a3a, 0x29392e], [0x263c35, 0x315044, 0x26372f], [0x42332d, 0x514038, 0x382d29]];
+      const material = new THREE.MeshStandardMaterial({ color: palettes[district][i % 3], roughness: 0.8 });
       const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, width), material);
       building.position.set(x, height / 2 - 0.06, z);
       world.add(building);
-      const windows = new THREE.Mesh(new THREE.BoxGeometry(width * 0.72, 0.08, width * 0.72), new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? 0xc6f36a : 0x8b9878, transparent: true, opacity: 0.55 }));
+      const windows = new THREE.Mesh(new THREE.BoxGeometry(width * 0.72, 0.08, width * 0.72), new THREE.MeshBasicMaterial({ color: [0xc6f36a, 0x77c6b3, 0xffb878][district], transparent: true, opacity: 0.58 }));
       windows.position.set(x, height * 0.64, z - width / 2 - 0.012);
       world.add(windows);
       obstacles.push({ x, z, baseX, baseZ, width, height, radius: width * 0.55, building, windows });
+    }
+
+    const streetLamps = [];
+    const lampPoleMaterial = new THREE.MeshStandardMaterial({ color: 0x717666, metalness: 0.65, roughness: 0.35 });
+    const lampGlowMaterial = new THREE.MeshBasicMaterial({ color: 0xd8ff9a });
+    for (let i = 0; i < 48; i += 1) {
+      const z = -i * 18;
+      const x = i % 2 ? -7 : 7;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, 4.2, 8), lampPoleMaterial);
+      pole.position.set(x, 2.1, z);
+      world.add(pole);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.08, 0.08), lampPoleMaterial);
+      arm.position.set(x + (x < 0 ? 0.35 : -0.35), 4.1, z);
+      world.add(arm);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), lampGlowMaterial);
+      bulb.position.set(x + (x < 0 ? 0.65 : -0.65), 4, z);
+      world.add(bulb);
+      streetLamps.push({ pole, arm, bulb, x, z });
     }
 
     const gateObjects = stops.map((stop) => {
@@ -275,6 +295,13 @@ export default function Drive() {
           setToast('BONK! Keep it between the curbs.');
           window.setTimeout(() => setToast(''), 1500);
         }
+      });
+      streetLamps.forEach((lamp) => {
+        const shift = Math.round((car.position.z - lamp.z) / 864) * 864;
+        lamp.z += shift;
+        lamp.pole.position.z = lamp.z;
+        lamp.arm.position.z = lamp.z;
+        lamp.bulb.position.z = lamp.z;
       });
       laneMarks.forEach((mark, index) => {
         if (index % 2 === 0) mark.position.z = car.position.z + (index / 2 - 10) * 5;
