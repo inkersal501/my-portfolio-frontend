@@ -136,6 +136,9 @@ export default function Drive() {
     const body = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.42, 2.05), new THREE.MeshStandardMaterial({ color: 0xc6f36a, metalness: 0.28, roughness: 0.3 }));
     body.position.y = 0.55;
     car.add(body);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.12, 0.72), new THREE.MeshStandardMaterial({ color: 0xaad755, metalness: 0.35, roughness: 0.3 }));
+    hood.position.set(0, 0.79, -0.66);
+    car.add(hood);
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.48, 0.92), new THREE.MeshStandardMaterial({ color: 0x243027, metalness: 0.2, roughness: 0.22 }));
     cabin.position.set(0, 0.97, -0.12);
     car.add(cabin);
@@ -148,6 +151,11 @@ export default function Drive() {
       wheel.position.set(x, 0.3, z);
       car.add(wheel);
       wheels.push(wheel);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.19, 12), new THREE.MeshStandardMaterial({ color: 0x9ba893, metalness: 0.7, roughness: 0.35 }));
+      hub.rotation.z = Math.PI / 2;
+      hub.position.copy(wheel.position);
+      car.add(hub);
+      wheels.push(hub);
     }
     const lampMaterial = new THREE.MeshBasicMaterial({ color: 0xfff2bc });
     for (const x of [-0.43, 0.43]) {
@@ -155,6 +163,20 @@ export default function Drive() {
       lamp.position.set(x, 0.59, -1.05);
       car.add(lamp);
     }
+    const tailMaterial = new THREE.MeshBasicMaterial({ color: 0xd9664d });
+    for (const x of [-0.43, 0.43]) {
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.06), tailMaterial);
+      tail.position.set(x, 0.59, 1.05);
+      car.add(tail);
+    }
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.08, 0.28), new THREE.MeshStandardMaterial({ color: 0x252d21, metalness: 0.25, roughness: 0.5 }));
+    spoiler.position.set(0, 0.92, 0.95);
+    car.add(spoiler);
+    const carShadow = new THREE.Mesh(new THREE.CircleGeometry(1.35, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+    carShadow.rotation.x = -Math.PI / 2;
+    carShadow.scale.set(0.7, 1.2, 1);
+    carShadow.position.y = 0.055;
+    world.add(carShadow);
     car.position.set(0, 0, 8);
     world.add(car);
 
@@ -485,6 +507,10 @@ export default function Drive() {
       car.rotation.z = -steer * Math.min(Math.abs(velocity) / 12, 1) * 0.055;
       if (jumpSpeed !== 0 || jumpHeight > 0) { jumpSpeed -= 18 * delta; jumpHeight += jumpSpeed * delta; if (jumpHeight <= 0) { jumpHeight = 0; jumpSpeed = 0; } }
       car.position.y = jumpHeight + (!reducedMotion.matches && jumpHeight === 0 && Math.abs(velocity) > 0.5 ? Math.sin(now * 0.012) * 0.025 : 0);
+      carShadow.position.x = car.position.x;
+      carShadow.position.z = car.position.z;
+      carShadow.rotation.z = yaw;
+      carShadow.material.opacity = Math.max(0.08, 0.3 - jumpHeight * 0.08);
       wheels.forEach((wheel) => { wheel.rotation.x -= velocity * delta * 1.7; });
       ramp.position.z += Math.round((car.position.z - ramp.position.z) / 240) * 240;
       ramp.position.x += Math.round((car.position.x - ramp.position.x) / 240) * 240;
