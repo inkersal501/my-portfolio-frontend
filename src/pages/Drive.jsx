@@ -48,6 +48,8 @@ export default function Drive() {
   const [routeRun, setRouteRun] = useState({ active: false, index: 0, elapsed: 0, finished: false });
   const [routeBest, setRouteBest] = useState(() => { try { const value = Number(window.localStorage.getItem('portfolio-drive-route-best-v1')); return Number.isFinite(value) && value > 0 ? value : null; } catch { return null; } });
   const routeBestRef = useRef(routeBest);
+  const [stuntBest, setStuntBest] = useState(() => { try { const value = Number(window.localStorage.getItem('portfolio-drive-stunt-best-v1')); return Number.isFinite(value) && value > 0 ? value : 0; } catch { return 0; } });
+  const stuntBestRef = useRef(stuntBest);
   const [speedZoneMessage, setSpeedZoneMessage] = useState('');
   const [paused, setPaused] = useState(false);
   const [handling, setHandling] = useState('arcade');
@@ -672,6 +674,7 @@ export default function Drive() {
     let velocity = 0;
     let jumpHeight = 0;
     let jumpSpeed = 0;
+    let jumpStart = null;
     let currentGear = 1;
     const gearLimits = [0, 5, 7, 9, 11, 14];
     let steer = 0;
@@ -757,7 +760,7 @@ export default function Drive() {
       setRouteRun({ active: true, index: 0, elapsed: 0, finished: false });
       announce('DRIVE THROUGH THE LIME RINGS IN ORDER');
     };
-    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; setGuidance(null); currentGear = 1; setGear(1); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
+    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; jumpStart = null; keys.clear(); targetStop = null; setGuidance(null); currentGear = 1; setGear(1); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
     const resetProgressObjects = () => { discovered.clear(); nearbyGates.clear(); setUnlocked(0); lastZone = ''; hiddenRelics.forEach((relic) => { relic.found = false; relic.mesh.visible = true; }); };
     const onQualityChange = () => resize();
     const capturePhoto = () => {
@@ -1001,7 +1004,28 @@ export default function Drive() {
       tailMaterial.color.setHex(braking || (reversing && velocity > 0.5) ? 0xff3922 : 0x9a392c);
       boostGlow.visible = accelerating && keys.has('shift') && !reducedMotion.matches;
       boostGlow.scale.y = 0.8 + Math.abs(velocity) * 0.05;
-      if (jumpSpeed !== 0 || jumpHeight > 0) { jumpSpeed -= 18 * delta; jumpHeight += jumpSpeed * delta; if (jumpHeight <= 0) { jumpHeight = 0; jumpSpeed = 0; } }
+      if (jumpSpeed !== 0 || jumpHeight > 0) {
+        if (!jumpStart) jumpStart = { x: previousPosition.x, z: previousPosition.z };
+        jumpSpeed -= 18 * delta;
+        jumpHeight += jumpSpeed * delta;
+        if (jumpHeight <= 0) {
+          jumpHeight = 0;
+          jumpSpeed = 0;
+          const distance = Math.hypot(car.position.x - jumpStart.x, car.position.z - jumpStart.z);
+          jumpStart = null;
+          if (distance >= 2) {
+            const rounded = Math.round(distance * 10) / 10;
+            if (rounded > stuntBestRef.current) {
+              stuntBestRef.current = rounded;
+              setStuntBest(rounded);
+              try { window.localStorage.setItem('portfolio-drive-stunt-best-v1', String(rounded)); } catch { /* Keep the best for this session. */ }
+            }
+            announce(`JUMP ${rounded.toFixed(1)} M · +1 CRYSTAL`, 2200);
+            setCollected((count) => count + 1);
+            playEffect(350, 700, 0.2);
+          }
+        }
+      }
       car.position.y = jumpHeight + (!reducedMotion.matches && jumpHeight === 0 && Math.abs(velocity) > 0.5 ? Math.sin(now * 0.012) * 0.025 : 0);
       carShadow.position.x = car.position.x;
       carShadow.position.z = car.position.z;
@@ -1267,7 +1291,7 @@ export default function Drive() {
     {photoMode && <section className="drive-photo-panel" aria-label="Photo mode controls"><strong>PHOTO MODE</strong><label>ANGLE <input type="range" min={-3.14} max={3.14} step={0.05} value={photoCamera.angle} onChange={(event) => setPhotoCamera((value) => ({ ...value, angle: Number(event.target.value) }))} /></label><label>DISTANCE <input type="range" min={4} max={20} step={0.5} value={photoCamera.distance} onChange={(event) => setPhotoCamera((value) => ({ ...value, distance: Number(event.target.value) }))} /></label><label>HEIGHT <input type="range" min={1.5} max={14} step={0.5} value={photoCamera.height} onChange={(event) => setPhotoCamera((value) => ({ ...value, height: Number(event.target.value) }))} /></label><div><button onClick={() => window.dispatchEvent(new Event('drive-photo'))}>SAVE IMAGE</button><button onClick={() => setPhotoCamera({ angle: 0, distance: 9, height: 5 })}>RESET CAMERA</button><button onClick={() => setPhotoMode(false)}>BACK TO DRIVE</button></div></section>}
     {showMissions && <section className="drive-world-panel drive-missions" aria-label="Missions"><button className="drive-panel-close" onClick={() => setShowMissions(false)} aria-label="Close missions">×</button><small>EXPLORER LEVEL {Math.floor(progress.xp / 150) + 1} · {progress.xp} XP</small><h2>Your missions</h2>{MISSIONS.map((mission) => { const count = ['route', 'speed', 'drift'].includes(mission.id) ? Number(progress[mission.id]) : progress[mission.id].length; const complete = progress.completed.includes(mission.id); return <p key={mission.id}><strong>{complete ? '✓ ' : ''}{mission.label}</strong><span>{Math.min(count, mission.target)} / {mission.target} · {complete ? 'COMPLETE' : `+${mission.reward} XP`}</span></p>; })}<small>Progress is saved in this browser.</small><button className="drive-reset-progress" onClick={() => { if (!window.confirm("Reset mission progress and XP? Your crystal run best will be kept.")) return; const fresh = initialProgress(); progressRef.current = fresh; setProgress(fresh); window.dispatchEvent(new Event("drive-reset-progress")); try { window.localStorage.setItem("portfolio-drive-progress-v1", JSON.stringify(fresh)); } catch { /* Continue without persistence. */ } }}>RESET MISSION PROGRESS</button></section>}
     {showGarage && <section className="drive-world-panel drive-garage" aria-label="Garage"><button className="drive-panel-close" onClick={() => setShowGarage(false)} aria-label="Close garage">×</button><small>YOUR GARAGE · GAME PAUSED</small><h2>Choose your ride</h2><div className="drive-garage-options"><button aria-pressed={garage.vehicle === 'sport'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'sport' }))}>SPORT <small>Faster on roads</small></button><button aria-pressed={garage.vehicle === 'suv'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'suv' }))}>SUV <small>Better off-road</small></button><button aria-pressed={garage.vehicle === 'supercar'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'supercar' }))}>SUPERCAR <small>Higher road speed</small></button></div><label>PAINT <select value={garage.paint} onChange={(event) => setGarage((value) => ({ ...value, paint: event.target.value }))}><option value="#c6f36a">Lime</option><option value="#e9e8e4">Ivory</option><option value="#789876">Sage</option><option value="#343f35">Graphite</option></select></label><label>WHEELS <select value={garage.wheels} onChange={(event) => setGarage((value) => ({ ...value, wheels: event.target.value }))}><option value="#9ba893">Silver</option><option value="#202620">Black</option><option value="#c6f36a">Lime</option></select></label><button className="drive-garage-done" onClick={() => setShowGarage(false)}>BACK TO DRIVING</button></section>}
-    {showAchievements && <section className="drive-achievements" aria-label="Achievements"><button onClick={() => setShowAchievements(false)} aria-label="Close achievements">×</button><h2>Milestones</h2><p>{collected >= 1 ? '✓' : '○'} First crystal <small>Collect a crystal</small></p><p>{collected >= 10 ? '✓' : '○'} Crystal hunter <small>Collect 10 crystals this visit</small></p><p>{unlocked >= stops.length ? '✓' : '○'} Explorer <small>Visit all {stops.length} destinations</small></p><p>{challenge.best >= 5 ? '✓' : '○'} Fast collector <small>Collect 5 crystals in one run</small></p><small>Run bests are saved in this browser. Visit achievements reset when the page reloads.</small></section>}
+    {showAchievements && <section className="drive-achievements" aria-label="Achievements"><button onClick={() => setShowAchievements(false)} aria-label="Close achievements">×</button><h2>Milestones</h2><p>{collected >= 1 ? '✓' : '○'} First crystal <small>Collect a crystal</small></p><p>{collected >= 10 ? '✓' : '○'} Crystal hunter <small>Collect 10 crystals this visit</small></p><p>{unlocked >= stops.length ? '✓' : '○'} Explorer <small>Visit all {stops.length} destinations</small></p><p>{challenge.best >= 5 ? '✓' : '○'} Fast collector <small>Collect 5 crystals in one run</small></p><p>{stuntBest >= 2 ? '✓' : '○'} Air time <small>Best jump: {stuntBest.toFixed(1)} m</small></p><small>Run and jump bests are saved in this browser. Visit achievements reset when the page reloads.</small></section>}
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>TIME <select value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value)}><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option><option value="auto">Cycle</option></select></label><label>WEATHER <select value={weather} onChange={(event) => setWeather(event.target.value)}><option value="clear">Clear</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
