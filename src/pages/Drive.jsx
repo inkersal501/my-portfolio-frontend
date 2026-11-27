@@ -35,8 +35,13 @@ export default function Drive() {
   const [destinationMeters, setDestinationMeters] = useState(null);
   const [guidance, setGuidance] = useState(null);
   const [toast, setToast] = useState('');
-  const [challenge, setChallenge] = useState({ active: false, seconds: 0, score: 0, best: 0 });
-  const challengeRef = useRef({ active: false, elapsed: 0, score: 0, best: 0 });
+  const [challenge, setChallenge] = useState(() => {
+    let best = 0;
+    try { best = Math.max(0, Number(window.localStorage.getItem('portfolio-drive-best')) || 0); } catch { /* Play without saved scores. */ }
+    return { active: false, seconds: 0, score: 0, best, finished: false };
+  });
+  const challengeRef = useRef({ active: false, elapsed: 0, score: 0, best: challenge.best });
+  const [showAchievements, setShowAchievements] = useState(false);
   const [paused, setPaused] = useState(false);
   const [handling, setHandling] = useState('arcade');
   const [quality, setQuality] = useState('high');
@@ -378,7 +383,7 @@ export default function Drive() {
       const gate = gateObjects[index];
       if (gate) targetStop = { ...event.detail, x: gate.position.x, z: gate.position.z };
     };
-    const startChallenge = () => { challengeRef.current = { active: true, elapsed: 0, score: 0, best: challengeRef.current.best }; setChallenge({ active: true, seconds: 0, score: 0, best: challengeRef.current.best }); };
+    const startChallenge = () => { challengeRef.current = { active: true, elapsed: 0, score: 0, best: challengeRef.current.best }; setChallenge({ active: true, seconds: 0, score: 0, best: challengeRef.current.best, finished: false }); };
     const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; setGuidance(null); currentGear = 1; setGear(1); };
     const onQualityChange = () => resize();
     const playPickup = () => {
@@ -451,7 +456,8 @@ export default function Drive() {
           const game = challengeRef.current;
           game.active = false;
           game.best = Math.max(game.best, game.score);
-          setChallenge({ active: false, seconds: 60, score: game.score, best: game.best });
+          try { window.localStorage.setItem('portfolio-drive-best', String(game.best)); } catch { /* Score remains available for this session. */ }
+          setChallenge({ active: false, seconds: 60, score: game.score, best: game.best, finished: true });
           setToast(`TIME UP! ${game.score} CRYSTALS`);
         }
       }
@@ -613,7 +619,7 @@ export default function Drive() {
           const turn = THREE.MathUtils.euclideanModulo(angle - yaw + Math.PI, Math.PI * 2) - Math.PI;
           setGuidance({ label: targetStop.label, direction: Math.abs(turn) > 2.5 ? 'TURN AROUND' : turn > 0.35 ? 'TURN RIGHT' : turn < -0.35 ? 'TURN LEFT' : 'STRAIGHT AHEAD' });
         }
-        if (challengeRef.current.active) { const game = challengeRef.current; setChallenge({ active: true, seconds: Math.floor(game.elapsed), score: game.score, best: game.best }); }
+        if (challengeRef.current.active) { const game = challengeRef.current; setChallenge({ active: true, seconds: Math.floor(game.elapsed), score: game.score, best: game.best, finished: false }); }
       }
       frame = requestAnimationFrame(animate);
     }
@@ -668,7 +674,8 @@ export default function Drive() {
     </section>}
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>Q / E SHIFT</span><span>SHIFT BOOST · J JUMP</span><i>Collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span>GEAR {gear}</span></div>
-    <div className="drive-challenge"><button onClick={() => window.dispatchEvent(new Event('drive-challenge'))}>{challenge.active ? 'RESTART RUN' : '60-SECOND CRYSTAL RUN'}</button><span>{challenge.active ? `${60 - challenge.seconds}s · ${challenge.score} collected` : `Best: ${challenge.best} crystals`}</span></div>
+    <div className="drive-challenge"><button onClick={() => window.dispatchEvent(new Event('drive-challenge'))}>{challenge.active ? 'RESTART RUN' : '60-SECOND CRYSTAL RUN'}</button><span aria-live="polite">{challenge.active ? `${60 - challenge.seconds}s · ${challenge.score} collected` : challenge.finished ? `Run: ${challenge.score} · Best: ${challenge.best}` : `Best: ${challenge.best} crystals`}</span><button onClick={() => setShowAchievements((value) => !value)} aria-expanded={showAchievements}>ACHIEVEMENTS</button></div>
+    {showAchievements && <section className="drive-achievements" aria-label="Achievements"><button onClick={() => setShowAchievements(false)} aria-label="Close achievements">×</button><h2>Milestones</h2><p>{collected >= 1 ? '✓' : '○'} First crystal <small>Collect a crystal</small></p><p>{collected >= 10 ? '✓' : '○'} Crystal hunter <small>Collect 10 crystals this visit</small></p><p>{unlocked >= stops.length ? '✓' : '○'} Explorer <small>Visit all {stops.length} destinations</small></p><p>{challenge.best >= 5 ? '✓' : '○'} Fast collector <small>Collect 5 crystals in one run</small></p><small>Run bests are saved in this browser. Visit achievements reset when the page reloads.</small></section>}
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
