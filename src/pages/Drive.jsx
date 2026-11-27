@@ -315,6 +315,26 @@ export default function Drive() {
     });
 
     const pickups = [];
+    const crates = [];
+    const crateGeometry = new THREE.BoxGeometry(1.1, 1.1, 1.1);
+    const crateMaterial = new THREE.MeshStandardMaterial({ color: 0x899b67, roughness: 0.82 });
+    for (let i = 0; i < 12; i += 1) {
+      const crate = new THREE.Mesh(crateGeometry, crateMaterial);
+      crate.position.set((i % 2 ? 1 : -1) * (3 + (i % 3)), 0.55, -14 - i * 17);
+      world.add(crate);
+      crates.push({ mesh: crate, vx: 0, vz: 0, spin: 0 });
+    }
+    const ramp = new THREE.Group();
+    const rampSurface = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.35, 5), new THREE.MeshStandardMaterial({ color: 0x6d8053, roughness: 0.9 }));
+    rampSurface.rotation.x = -0.16;
+    rampSurface.position.y = 0.4;
+    ramp.add(rampSurface);
+    const rampMark = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 0.28), new THREE.MeshBasicMaterial({ color: 0xc6f36a, side: THREE.DoubleSide }));
+    rampMark.rotation.x = -Math.PI / 2 - 0.16;
+    rampMark.position.set(0, 0.63, 0);
+    ramp.add(rampMark);
+    ramp.position.set(0, 0, -48);
+    world.add(ramp);
     const pickupMaterial = new THREE.MeshStandardMaterial({ color: 0xe1ff9e, emissive: 0x8bbb43, emissiveIntensity: 1.5, metalness: 0.35, roughness: 0.25 });
     for (let i = 0; i < 12; i += 1) {
       const pickup = new THREE.Mesh(new THREE.OctahedronGeometry(0.34, 0), pickupMaterial);
@@ -335,6 +355,7 @@ export default function Drive() {
     let steer = 0;
     let yaw = 0;
     let crashCooldown = 0;
+    let rampCooldown = 0;
     const discovered = new Set();
     const nearbyGates = new Set();
     let speedUpdateAt = 0;
@@ -367,6 +388,19 @@ export default function Drive() {
       oscillator.frequency.exponentialRampToValueAtTime(1180, audio.currentTime + 0.11);
       gain.gain.setValueAtTime(0.12, audio.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.18);
       oscillator.connect(gain); gain.connect(audio.destination); oscillator.start(); oscillator.stop(audio.currentTime + 0.18);
+    };
+    const playImpact = () => {
+      if (settingsRef.current.muted || !audioRef.current) return;
+      const audio = audioRef.current;
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(140, audio.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(45, audio.currentTime + 0.13);
+      gain.gain.setValueAtTime(0.13, audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.18);
+      oscillator.connect(gain); gain.connect(audio.destination);
+      oscillator.start(); oscillator.stop(audio.currentTime + 0.18);
     };
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
@@ -455,11 +489,46 @@ export default function Drive() {
       if (jumpSpeed !== 0 || jumpHeight > 0) { jumpSpeed -= 18 * delta; jumpHeight += jumpSpeed * delta; if (jumpHeight <= 0) { jumpHeight = 0; jumpSpeed = 0; } }
       car.position.y = jumpHeight + (jumpHeight === 0 && Math.abs(velocity) > 0.5 ? Math.sin(now * 0.012) * 0.025 : 0);
       wheels.forEach((wheel) => { wheel.rotation.x -= velocity * delta * 1.7; });
+      ramp.position.z += Math.round((car.position.z - ramp.position.z) / 240) * 240;
+      ramp.position.x += Math.round((car.position.x - ramp.position.x) / 240) * 240;
+      rampCooldown = Math.max(0, rampCooldown - delta);
+      if (rampCooldown === 0 && jumpHeight === 0 && Math.abs(velocity) > 2 && Math.abs(car.position.x - ramp.position.x) < 2 && Math.abs(car.position.z - ramp.position.z) < 2) {
+        jumpSpeed = 8;
+        rampCooldown = 2;
+        setToast('RAMP JUMP!');
+        window.setTimeout(() => setToast(''), 1400);
+        playPickup();
+      }
+      crates.forEach((crate) => {
+        const item = crate.mesh;
+        item.position.x += crate.vx * delta;
+        item.position.z += crate.vz * delta;
+        item.rotation.y += crate.spin * delta;
+        crate.vx *= Math.exp(-2 * delta);
+        crate.vz *= Math.exp(-2 * delta);
+        crate.spin *= Math.exp(-2 * delta);
+        item.position.x += Math.round((car.position.x - item.position.x) / 240) * 240;
+        item.position.z += Math.round((car.position.z - item.position.z) / 240) * 240;
+        const dx = item.position.x - car.position.x;
+        const dz = item.position.z - car.position.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance < 1.35 && jumpHeight < 1 && Math.abs(velocity) > 1) {
+          const impulse = Math.max(3, Math.abs(velocity) * 0.75);
+          crate.vx = Math.sin(yaw) * impulse;
+          crate.vz = -Math.cos(yaw) * impulse;
+          crate.spin = velocity * 0.5;
+          item.position.x += (dx / (distance || 1)) * 0.3;
+          item.position.z += (dz / (distance || 1)) * 0.3;
+          velocity *= 0.85;
+          if (crashCooldown <= 0) { playImpact(); crashCooldown = 0.3; }
+        }
+      });
       obstacles.forEach((item) => {
         if (crashCooldown <= 0 && Math.abs(car.position.x - item.x) < item.radius + 0.7 && Math.abs(car.position.z - item.z) < item.radius + 0.9) {
           car.position.copy(previousPosition);
           velocity *= -0.24;
           crashCooldown = 0.7;
+          playImpact();
           setToast('BONK! Keep it between the curbs.');
           window.setTimeout(() => setToast(''), 1500);
         }
