@@ -227,6 +227,34 @@ export default function Drive() {
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.48, 0.92), new THREE.MeshStandardMaterial({ color: 0x243027, metalness: 0.2, roughness: 0.22 }));
     cabin.position.set(0, 0.97, -0.12);
     car.add(cabin);
+    // The supercar uses a separate wedge-shaped body rather than stretching the SUV.
+    const supercarDetails = new THREE.Group();
+    const wedgeGeometry = new THREE.BufferGeometry();
+    wedgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+      -0.78, 0.34, -1.2, 0.78, 0.34, -1.2, -0.78, 0.34, 1.12, 0.78, 0.34, 1.12,
+      -0.68, 0.52, -1.2, 0.68, 0.52, -1.2, -0.72, 0.78, 1.12, 0.72, 0.78, 1.12,
+    ], 3));
+    wedgeGeometry.setIndex([0, 2, 1, 1, 2, 3, 4, 5, 6, 5, 7, 6, 0, 1, 4, 1, 5, 4, 2, 6, 3, 3, 6, 7, 0, 4, 2, 2, 4, 6, 1, 3, 5, 3, 7, 5]);
+    wedgeGeometry.computeVertexNormals();
+    const supercarBody = new THREE.Mesh(wedgeGeometry, body.material);
+    supercarDetails.add(supercarBody);
+    const supercarGlass = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.28, 0.9), cabin.material);
+    supercarGlass.position.set(0, 0.86, 0.12);
+    supercarDetails.add(supercarGlass);
+    const supercarTrim = new THREE.MeshStandardMaterial({ color: 0x111811, roughness: 0.45, metalness: 0.3 });
+    const intakeGeometry = new THREE.BoxGeometry(0.035, 0.19, 0.45);
+    const headlightGeometry = new THREE.BoxGeometry(0.32, 0.055, 0.025);
+    const supercarLights = new THREE.MeshBasicMaterial({ color: 0xeaffde });
+    for (const side of [-1, 1]) {
+      const intake = new THREE.Mesh(intakeGeometry, supercarTrim);
+      intake.position.set(side * 0.76, 0.55, 0.53);
+      const light = new THREE.Mesh(headlightGeometry, supercarLights);
+      light.position.set(side * 0.47, 0.54, -1.21);
+      light.rotation.z = side * 0.12;
+      supercarDetails.add(intake, light);
+    }
+    supercarDetails.visible = false;
+    car.add(supercarDetails);
     const wheelGeometry = new THREE.CylinderGeometry(0.26, 0.26, 0.18, 16);
     const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x151715, roughness: 0.8 });
     const hubMaterial = new THREE.MeshStandardMaterial({ color: 0x9ba893, metalness: 0.7, roughness: 0.35 });
@@ -908,6 +936,10 @@ export default function Drive() {
         const xuv = chosenGarage.vehicle === 'xuv700';
         const suv = chosenGarage.vehicle === 'suv' || xuv;
         const supercar = chosenGarage.vehicle === 'supercar';
+        body.visible = !supercar;
+        hood.visible = !supercar;
+        cabin.visible = !supercar;
+        supercarDetails.visible = supercar;
         body.scale.set(suv ? 1.1 : supercar ? 1.2 : 1, suv ? 1.45 : supercar ? 0.72 : 1, suv ? 0.9 : supercar ? 1.15 : 1);
         cabin.scale.set(suv ? 1.1 : supercar ? 0.92 : 1, suv ? 1.3 : supercar ? 0.72 : 1, suv ? 1.25 : supercar ? 0.9 : 1);
         cabin.position.y = suv ? 1.08 : supercar ? 0.88 : 0.97;
