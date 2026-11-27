@@ -3,10 +3,10 @@ import * as THREE from 'three';
 import { about, experience, profile, projects, skills } from '../data/portfolio';
 
 const stops = [
-  { id: 'about', label: 'ABOUT', title: 'A little about me', x: -2.1, z: -8, color: 0xc6f36a },
-  { id: 'experience', label: 'EXPERIENCE', title: 'The path so far', x: 2.1, z: -18, color: 0x77c6b3 },
-  { id: 'projects', label: 'PROJECTS', title: 'Things I have made', x: -2.1, z: -28, color: 0xf0b76d },
-  { id: 'skills', label: 'SKILLS', title: 'Tools of the trade', x: 2.1, z: -38, color: 0xb69cff },
+  { id: 'about', label: 'ABOUT', title: 'A little about me', x: -7, z: -20, color: 0xc6f36a },
+  { id: 'experience', label: 'EXPERIENCE', title: 'The path so far', x: 12, z: -75, color: 0x77c6b3 },
+  { id: 'projects', label: 'PROJECTS', title: 'Things I have made', x: -16, z: -145, color: 0xf0b76d },
+  { id: 'skills', label: 'SKILLS', title: 'Tools of the trade', x: 8, z: -230, color: 0xb69cff },
 ];
 
 function makeTextTexture(text, color = '#f0f1e9') {
@@ -48,28 +48,35 @@ export default function Drive() {
     sun.position.set(-8, 15, 8);
     scene.add(sun);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(160, 100), new THREE.MeshStandardMaterial({ color: 0x20261d, roughness: 0.95 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: 0x20261d, roughness: 0.95 }));
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(0, -0.08, -18);
+    ground.position.y = -0.08;
     world.add(ground);
-
+    const groundGrid = new THREE.GridHelper(12000, 80, 0x3b4435, 0x293128);
+    groundGrid.position.y = -0.065;
+    world.add(groundGrid);
     const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x30332d, roughness: 0.9 });
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(10, 78), roadMaterial);
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(10, 10000), roadMaterial);
     road.rotation.x = -Math.PI / 2;
-    road.position.set(0, -0.035, -19);
+    road.position.y = -0.035;
     world.add(road);
-    const curbMaterial = new THREE.MeshStandardMaterial({ color: 0x667054, roughness: 0.8 });
-    for (const x of [-5.15, 5.15]) {
-      const curb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 78), curbMaterial);
-      curb.position.set(x, 0.02, -19);
-      world.add(curb);
-    }
+    const crossRoad = new THREE.Mesh(new THREE.PlaneGeometry(10000, 10), roadMaterial);
+    crossRoad.rotation.x = -Math.PI / 2;
+    crossRoad.position.y = -0.034;
+    world.add(crossRoad);
     const dashMaterial = new THREE.MeshBasicMaterial({ color: 0xc6f36a });
-    for (let z = 14; z > -58; z -= 5) {
+    const laneMarks = [];
+    for (let i = -10; i <= 10; i += 1) {
       const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 2.1), dashMaterial);
       dash.rotation.x = -Math.PI / 2;
-      dash.position.set(0, 0.01, z);
+      dash.position.set(0, 0.01, i * 5);
       world.add(dash);
+      laneMarks.push(dash);
+      const sideDash = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 2.1), dashMaterial);
+      sideDash.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+      sideDash.position.set(i * 5, 0.01, 0);
+      world.add(sideDash);
+      laneMarks.push(sideDash);
     }
 
     const car = new THREE.Group();
@@ -99,10 +106,14 @@ export default function Drive() {
     world.add(car);
 
     const obstacles = [];
-    for (let i = 0; i < 34; i += 1) {
-      const side = i % 2 ? 1 : -1;
-      const z = 12 - Math.floor(i / 2) * 4.6;
-      const x = side * (9 + Math.random() * 8);
+    for (let i = 0; i < 160; i += 1) {
+      const cellX = (i % 10) * 36 - 162;
+      const cellZ = Math.floor(i / 10) * 36 - 270;
+      let x = cellX + (Math.random() - 0.5) * 18;
+      const z = cellZ + (Math.random() - 0.5) * 18;
+      if (Math.abs(x) < 12 || Math.abs(z) < 12) x += x < 0 ? -12 : 12;
+      const baseX = x;
+      const baseZ = z;
       const height = 1.5 + Math.random() * 5;
       const width = 1.5 + Math.random() * 3;
       const material = new THREE.MeshStandardMaterial({ color: [0x343b30, 0x454a3a, 0x29392e][i % 3], roughness: 0.8 });
@@ -112,7 +123,7 @@ export default function Drive() {
       const windows = new THREE.Mesh(new THREE.BoxGeometry(width * 0.72, 0.08, width * 0.72), new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? 0xc6f36a : 0x8b9878, transparent: true, opacity: 0.55 }));
       windows.position.set(x, height * 0.64, z - width / 2 - 0.012);
       world.add(windows);
-      obstacles.push({ x, z, radius: width * 0.55 });
+      obstacles.push({ x, z, baseX, baseZ, width, height, radius: width * 0.55, building, windows });
     }
 
     const gateObjects = stops.map((stop) => {
@@ -197,16 +208,6 @@ export default function Drive() {
       const left = keys.has('a') || keys.has('arrowleft');
       const right = keys.has('d') || keys.has('arrowright');
       const direction = pointer.down ? touchSteer : Number(right) - Number(left);
-      if (targetStop) {
-        const dx = targetStop.x - car.position.x;
-        const dz = targetStop.z - car.position.z;
-        const distance = Math.hypot(dx, dz);
-        const desiredYaw = Math.atan2(dx, -dz);
-        yaw += THREE.MathUtils.euclideanModulo(desiredYaw - yaw + Math.PI, Math.PI * 2) - Math.PI;
-        yaw = THREE.MathUtils.clamp(yaw, -0.7, 0.7);
-        velocity = THREE.MathUtils.clamp(distance * 0.65, 3, 7);
-        if (distance < 2.2) { setActiveStop(targetStop.id); targetStop = null; velocity = 0; }
-      }
       if (!targetStop) {
         const targetVelocity = accelerating ? 10 : reversing ? -3.5 : 0;
         const response = braking ? 20 : (accelerating || reversing ? 7 : 3.1);
@@ -214,13 +215,23 @@ export default function Drive() {
       }
       const offRoad = Math.abs(car.position.x) > 4.35;
       if (offRoad) velocity = THREE.MathUtils.damp(velocity, 2.2, 1.8, delta);
-      steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 8 : 11, delta);
-      const grip = THREE.MathUtils.lerp(0.13, 0.07, Math.min(Math.abs(velocity) / 10, 1));
+      steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 10 : 12, delta);
+      if (targetStop) {
+        const dx = targetStop.x - car.position.x;
+        const dz = targetStop.z - car.position.z;
+        const desiredYaw = Math.atan2(dx, -dz);
+        const yawError = THREE.MathUtils.euclideanModulo(desiredYaw - yaw + Math.PI, Math.PI * 2) - Math.PI;
+        steer = THREE.MathUtils.clamp(yawError * 1.8, -1, 1);
+        velocity = THREE.MathUtils.damp(velocity, Math.min(8, Math.hypot(dx, dz) * 0.55), 2.8, delta);
+        if (Math.hypot(dx, dz) < 3) { setActiveStop(targetStop.id); targetStop = null; velocity = 0; }
+      }
+      const grip = THREE.MathUtils.lerp(0.95, 0.53, Math.min(Math.abs(velocity) / 10, 1));
       yaw += steer * velocity * delta * grip;
+      yaw = THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI;
       const previousPosition = car.position.clone();
       car.position.x += Math.sin(yaw) * velocity * delta;
       car.position.z -= Math.cos(yaw) * velocity * delta;
-      car.position.x = THREE.MathUtils.clamp(car.position.x, -5.8, 5.8);
+      car.position.x = THREE.MathUtils.clamp(car.position.x, -5990, 5990);
       car.rotation.y = yaw;
       car.rotation.z = -steer * Math.min(Math.abs(velocity) / 12, 1) * 0.055;
       car.position.y = Math.abs(velocity) > 0.5 ? Math.sin(now * 0.012) * 0.025 : 0;
@@ -234,9 +245,15 @@ export default function Drive() {
           window.setTimeout(() => setToast(''), 1500);
         }
       });
+      laneMarks.forEach((mark, index) => {
+        if (index % 2 === 0) mark.position.z = car.position.z + (index / 2 - 10) * 5;
+        else mark.position.x = car.position.x + (Math.floor(index / 2) - 10) * 5;
+      });
       crashCooldown -= delta;
       gateObjects.forEach((gate, index) => {
-        gate.position.z = stops[index].z;
+        const lap = Math.round((car.position.z - stops[index].z) / 300) * 300;
+        gate.position.x = stops[index].x + Math.round((car.position.x - stops[index].x) / 300) * 300;
+        gate.position.z = stops[index].z + lap;
         if (Math.abs(car.position.z - gate.position.z) < 2 && Math.abs(car.position.x - stops[index].x) < 3 && lastUnlocked < index) {
           lastUnlocked = index;
           setUnlocked(index + 1);
@@ -247,6 +264,9 @@ export default function Drive() {
       });
       pickups.forEach((pickup) => {
         if (!pickup.found) {
+          const lap = Math.round((car.position.z - pickup.mesh.position.z) / 220) * 220;
+          pickup.mesh.position.z += lap;
+          pickup.mesh.position.x += Math.round((car.position.x - pickup.mesh.position.x) / 220) * 220;
           pickup.mesh.rotation.y += delta * 1.8;
           pickup.mesh.position.y = 0.65 + Math.sin(now * 0.003 + pickup.mesh.position.z) * 0.12;
           if (Math.hypot(car.position.x - pickup.mesh.position.x, car.position.z - pickup.mesh.position.z) < 1.1) {
@@ -263,6 +283,14 @@ export default function Drive() {
         const dz = targetStop.z - car.position.z;
         if (Math.hypot(dx, dz) < 2) { setActiveStop(targetStop.id); targetStop = null; }
       }
+      obstacles.forEach((item) => {
+        const lapX = Math.round((car.position.x - item.x) / 360) * 360;
+        const lapZ = Math.round((car.position.z - item.z) / 360) * 360;
+        item.x += lapX;
+        item.z += lapZ;
+        item.building.position.set(item.x, item.height / 2 - 0.06, item.z);
+        item.windows.position.set(item.x, item.height * 0.64, item.z - item.width / 2 - 0.012);
+      });
       const cameraTarget = new THREE.Vector3(car.position.x, 0.7, car.position.z - 5);
       camera.position.lerp(new THREE.Vector3(car.position.x - Math.sin(yaw) * 2.2, 5.2, car.position.z + 10), 1 - Math.exp(-delta * 3.5));
       camera.lookAt(cameraTarget);
@@ -312,10 +340,10 @@ export default function Drive() {
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
-      <button onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }}>LEFT</button>
-      <button onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp' })); }}>GO</button>
-      <button onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); }}>RIGHT</button>
-      <button onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })); }}>BRAKE</button>
+      <button aria-label="Steer left" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft' })); }}>LEFT</button>
+      <button aria-label="Accelerate" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp' })); }}>GO</button>
+      <button aria-label="Steer right" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight' })); }}>RIGHT</button>
+      <button aria-label="Brake" onPointerDown={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })); }} onPointerUp={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })); }} onPointerLeave={() => { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })); }}>BRAKE</button>
     </div>
     <nav className="drive-destinations" aria-label="Portfolio destinations">{stops.map((item) => <button key={item.id} onClick={() => { const event = new CustomEvent('drive-destination', { detail: item }); window.dispatchEvent(event); }}>{item.label}</button>)}</nav>
   </main>;
