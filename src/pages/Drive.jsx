@@ -38,8 +38,6 @@ export default function Drive() {
   const [quality, setQuality] = useState('high');
   const [muted, setMuted] = useState(true);
   const [webglError, setWebglError] = useState(false);
-  const [position, setPosition] = useState({ x: 0, z: 0, heading: 0 });
-  const minimapRef = useRef(null);
   const audioRef = useRef(null);
   const engineRef = useRef(null);
   const settingsRef = useRef({ paused, handling, quality, muted });
@@ -412,7 +410,6 @@ export default function Drive() {
         speedUpdateAt = now;
         setSpeed(Math.round(Math.abs(velocity) * 9));
         setDestinationMeters(targetStop ? Math.round(Math.hypot(targetStop.x - car.position.x, targetStop.z - car.position.z)) : null);
-        setPosition({ x: car.position.x, z: car.position.z, heading: yaw });
       }
       frame = requestAnimationFrame(animate);
     }
@@ -442,18 +439,6 @@ export default function Drive() {
   }, []);
 
   const stop = stops.find((item) => item.id === activeStop);
-  useEffect(() => {
-    const map = minimapRef.current;
-    const context = map?.getContext('2d');
-    if (!context) return;
-    context.clearRect(0, 0, 140, 140);
-    context.fillStyle = '#182017'; context.fillRect(0, 0, 140, 140);
-    context.strokeStyle = '#555d4b'; context.lineWidth = 8;
-    context.beginPath(); context.moveTo(70, 0); context.lineTo(70, 140); context.moveTo(0, 70); context.lineTo(140, 70); context.stroke();
-    const scale = 2.2;
-    stops.forEach((item) => { context.fillStyle = `#${item.color.toString(16).padStart(6, '0')}`; context.beginPath(); context.arc(70 + (item.x - position.x) * scale, 70 + (item.z - position.z) * scale, 4, 0, Math.PI * 2); context.fill(); });
-    context.save(); context.translate(70, 70); context.rotate(-position.heading); context.fillStyle = '#fff'; context.beginPath(); context.moveTo(0, -8); context.lineTo(5, 6); context.lineTo(-5, 6); context.fill(); context.restore();
-  }, [position]);
   return <main className="drive-page">
     {webglError && <div className="drive-error"><h1>3D mode is unavailable</h1><p>Your browser could not start WebGL. You can still use the regular portfolio.</p><a href="/">Back to portfolio</a></div>}
     <canvas ref={canvasRef} className="drive-canvas" aria-label="Three dimensional portfolio driving playground. Use arrow keys or WASD to drive." />
@@ -470,7 +455,6 @@ export default function Drive() {
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>Q / E SHIFT</span><i>Swipe to steer · collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span>GEAR {gear}</span></div>
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
-    <canvas className="drive-minimap" ref={minimapRef} width="140" height="140" aria-label="Nearby map" />
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
