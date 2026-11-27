@@ -73,6 +73,7 @@ export default function Drive() {
       for (const key of ['zones', 'relics', 'destinations', 'completed']) if (Array.isArray(saved[key])) base[key] = saved[key].filter((item) => typeof item === 'string');
       base.route = saved.route === true;
       base.speed = saved.speed === true;
+      base.drift = saved.drift === true;
       base.xp = Number.isFinite(saved.xp) ? Math.max(0, saved.xp) : 0;
       return base;
     } catch { return initialProgress(); }
@@ -81,7 +82,7 @@ export default function Drive() {
   const audioRef = useRef(null);
   const engineRef = useRef(null);
   const settingsRef = useRef({ paused, handling, quality, muted, garage, timeOfDay, weather, photoMode, photoCamera });
-  settingsRef.current = { paused: paused || showGarage || showTutorial || photoMode, handling, quality, muted, garage, timeOfDay, weather, photoMode, photoCamera };
+  settingsRef.current = { paused: paused || showGarage || showTutorial || photoMode, handling, quality, muted, garage, timeOfDay, weather, photoMode, photoCamera, showGarage };
 
   useEffect(() => { try { window.localStorage.setItem('portfolio-drive-garage-v1', JSON.stringify({ version: 1, ...garage })); } catch { /* Keep settings for this visit. */ } }, [garage]);
 
@@ -221,6 +222,10 @@ export default function Drive() {
       lamp.position.set(x, 0.59, -1.05);
       car.add(lamp);
     }
+    const headlights = new THREE.SpotLight(0xe8ffd0, 0, 18, Math.PI / 6, 0.6, 1.5);
+    headlights.position.set(0, 0.8, -0.85);
+    headlights.target.position.set(0, 0, -8);
+    car.add(headlights, headlights.target);
     const tailMaterial = new THREE.MeshBasicMaterial({ color: 0xd9664d });
     for (const x of [-0.43, 0.43]) {
       const tail = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.06), tailMaterial);
@@ -594,6 +599,7 @@ export default function Drive() {
     let yaw = 0;
     let crashCooldown = 0;
     let rampCooldown = 0;
+    let fastTurnTime = 0;
     const discovered = new Set();
     const nearbyGates = new Set();
     let nearbyDestination = null;
@@ -623,6 +629,7 @@ export default function Drive() {
     let lastZone = '';
     let appliedGarage = '';
     let appliedTime = '';
+    let dayCycleElapsed = 0;
     const skyColors = { day: 0x71886b, sunset: 0x5d4b3c, night: 0x10130f };
     const targetSky = new THREE.Color(skyColors.night);
     let targetSunIntensity = 1.4;
@@ -790,6 +797,10 @@ export default function Drive() {
           const photo = settingsRef.current.photoCamera;
           camera.position.set(car.position.x + Math.sin(photo.angle) * photo.distance, car.position.y + photo.height, car.position.z + Math.cos(photo.angle) * photo.distance);
           camera.lookAt(car.position.x, car.position.y + 0.7, car.position.z);
+        } else if (settingsRef.current.showGarage) {
+          const angle = reducedMotion.matches ? 0.7 : 0.7 + now * 0.0002;
+          camera.position.set(car.position.x + Math.sin(angle) * 6, car.position.y + 3.2, car.position.z + Math.cos(angle) * 6);
+          camera.lookAt(car.position.x, car.position.y + 0.65, car.position.z);
         }
         renderer.render(scene, camera);
         frame = requestAnimationFrame(animate);
@@ -818,8 +829,10 @@ export default function Drive() {
         if (!progressRef.current.zones.includes(zone.id)) announce(`${zone.name.toUpperCase()} · ${zone.description}`, 3000);
         recordProgress('zones', zone.id);
       }
-      if (settingsRef.current.timeOfDay !== appliedTime) {
-        appliedTime = settingsRef.current.timeOfDay;
+      if (settingsRef.current.timeOfDay === 'auto') dayCycleElapsed += delta;
+      const selectedTime = settingsRef.current.timeOfDay === 'auto' ? ['day', 'sunset', 'night'][Math.floor(dayCycleElapsed / 45) % 3] : settingsRef.current.timeOfDay;
+      if (selectedTime !== appliedTime) {
+        appliedTime = selectedTime;
         targetSky.setHex(skyColors[appliedTime]);
         targetSunIntensity = appliedTime === 'day' ? 4 : appliedTime === 'sunset' ? 2.5 : 1.4;
         targetWindowOpacity = appliedTime === 'day' ? 0.2 : 0.7;
@@ -829,6 +842,7 @@ export default function Drive() {
       scene.background.lerp(targetSky, 1 - Math.exp(-delta * 0.8));
       scene.fog.color.copy(scene.background);
       sun.intensity = THREE.MathUtils.damp(sun.intensity, targetSunIntensity, 0.8, delta);
+      headlights.intensity = THREE.MathUtils.damp(headlights.intensity, appliedTime === 'night' && settingsRef.current.quality !== 'low' ? 18 : 0, 0.8, delta);
       windowMaterials.forEach((material) => { material.opacity = THREE.MathUtils.damp(material.opacity, targetWindowOpacity, 0.8, delta); });
       if (challengeRef.current.active) {
         challengeRef.current.elapsed += delta;
@@ -861,6 +875,10 @@ export default function Drive() {
       const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35;
       if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, settingsRef.current.garage.vehicle === 'suv' ? 9 : 7);
       steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 10 : 12, delta);
+      if (!progressRef.current.drift) {
+        fastTurnTime = velocity > 4 && Math.abs(steer) > 0.6 && jumpHeight === 0 ? fastTurnTime + delta : 0;
+        if (fastTurnTime >= 4) recordProgress('drift', true);
+      }
       const grip = settingsRef.current.handling === 'relaxed' ? 1.4 : THREE.MathUtils.lerp(0.95, 0.53, Math.min(Math.abs(velocity) / 10, 1));
       yaw += steer * velocity * delta * grip;
       yaw = THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI;
@@ -1122,11 +1140,11 @@ export default function Drive() {
     <div className="drive-route"><button onClick={() => window.dispatchEvent(new Event('drive-route'))}>{routeRun.active ? 'RESTART ROUTE' : 'START CHECKPOINT ROUTE'}</button><span>{routeRun.active ? `GATE ${routeRun.index + 1} / 5 · ${routeRun.elapsed.toFixed(1)}s` : routeRun.finished ? `COMPLETE · ${routeRun.elapsed.toFixed(1)}s · +5 CRYSTALS` : '5 GATES · +5 CRYSTALS'}</span></div>
     <div className="drive-world-menu"><button onClick={() => setShowMissions((value) => !value)} aria-expanded={showMissions}>MISSIONS</button><button onClick={() => setShowGarage(true)}>GARAGE</button><button onClick={() => setPhotoMode(true)}>PHOTO</button></div>
     {photoMode && <section className="drive-photo-panel" aria-label="Photo mode controls"><strong>PHOTO MODE</strong><label>ANGLE <input type="range" min={-3.14} max={3.14} step={0.05} value={photoCamera.angle} onChange={(event) => setPhotoCamera((value) => ({ ...value, angle: Number(event.target.value) }))} /></label><label>DISTANCE <input type="range" min={4} max={20} step={0.5} value={photoCamera.distance} onChange={(event) => setPhotoCamera((value) => ({ ...value, distance: Number(event.target.value) }))} /></label><label>HEIGHT <input type="range" min={1.5} max={14} step={0.5} value={photoCamera.height} onChange={(event) => setPhotoCamera((value) => ({ ...value, height: Number(event.target.value) }))} /></label><div><button onClick={() => window.dispatchEvent(new Event('drive-photo'))}>SAVE IMAGE</button><button onClick={() => setPhotoCamera({ angle: 0, distance: 9, height: 5 })}>RESET CAMERA</button><button onClick={() => setPhotoMode(false)}>BACK TO DRIVE</button></div></section>}
-    {showMissions && <section className="drive-world-panel drive-missions" aria-label="Missions"><button className="drive-panel-close" onClick={() => setShowMissions(false)} aria-label="Close missions">×</button><small>EXPLORER LEVEL {Math.floor(progress.xp / 150) + 1} · {progress.xp} XP</small><h2>Your missions</h2>{MISSIONS.map((mission) => { const count = mission.id === 'route' || mission.id === 'speed' ? Number(progress[mission.id]) : progress[mission.id].length; const complete = progress.completed.includes(mission.id); return <p key={mission.id}><strong>{complete ? '✓ ' : ''}{mission.label}</strong><span>{Math.min(count, mission.target)} / {mission.target} · {complete ? 'COMPLETE' : `+${mission.reward} XP`}</span></p>; })}<small>Progress is saved in this browser.</small><button className="drive-reset-progress" onClick={() => { if (!window.confirm("Reset mission progress and XP? Your crystal run best will be kept.")) return; const fresh = initialProgress(); progressRef.current = fresh; setProgress(fresh); window.dispatchEvent(new Event("drive-reset-progress")); try { window.localStorage.setItem("portfolio-drive-progress-v1", JSON.stringify(fresh)); } catch { /* Continue without persistence. */ } }}>RESET MISSION PROGRESS</button></section>}
+    {showMissions && <section className="drive-world-panel drive-missions" aria-label="Missions"><button className="drive-panel-close" onClick={() => setShowMissions(false)} aria-label="Close missions">×</button><small>EXPLORER LEVEL {Math.floor(progress.xp / 150) + 1} · {progress.xp} XP</small><h2>Your missions</h2>{MISSIONS.map((mission) => { const count = ['route', 'speed', 'drift'].includes(mission.id) ? Number(progress[mission.id]) : progress[mission.id].length; const complete = progress.completed.includes(mission.id); return <p key={mission.id}><strong>{complete ? '✓ ' : ''}{mission.label}</strong><span>{Math.min(count, mission.target)} / {mission.target} · {complete ? 'COMPLETE' : `+${mission.reward} XP`}</span></p>; })}<small>Progress is saved in this browser.</small><button className="drive-reset-progress" onClick={() => { if (!window.confirm("Reset mission progress and XP? Your crystal run best will be kept.")) return; const fresh = initialProgress(); progressRef.current = fresh; setProgress(fresh); window.dispatchEvent(new Event("drive-reset-progress")); try { window.localStorage.setItem("portfolio-drive-progress-v1", JSON.stringify(fresh)); } catch { /* Continue without persistence. */ } }}>RESET MISSION PROGRESS</button></section>}
     {showGarage && <section className="drive-world-panel drive-garage" aria-label="Garage"><button className="drive-panel-close" onClick={() => setShowGarage(false)} aria-label="Close garage">×</button><small>YOUR GARAGE · GAME PAUSED</small><h2>Choose your ride</h2><div className="drive-garage-options"><button aria-pressed={garage.vehicle === 'sport'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'sport' }))}>SPORT <small>Faster on roads</small></button><button aria-pressed={garage.vehicle === 'suv'} onClick={() => setGarage((value) => ({ ...value, vehicle: 'suv' }))}>SUV <small>Better off-road</small></button></div><label>PAINT <select value={garage.paint} onChange={(event) => setGarage((value) => ({ ...value, paint: event.target.value }))}><option value="#c6f36a">Lime</option><option value="#e9e8e4">Ivory</option><option value="#789876">Sage</option><option value="#343f35">Graphite</option></select></label><label>WHEELS <select value={garage.wheels} onChange={(event) => setGarage((value) => ({ ...value, wheels: event.target.value }))}><option value="#9ba893">Silver</option><option value="#202620">Black</option><option value="#c6f36a">Lime</option></select></label><button className="drive-garage-done" onClick={() => setShowGarage(false)}>BACK TO DRIVING</button></section>}
     {showAchievements && <section className="drive-achievements" aria-label="Achievements"><button onClick={() => setShowAchievements(false)} aria-label="Close achievements">×</button><h2>Milestones</h2><p>{collected >= 1 ? '✓' : '○'} First crystal <small>Collect a crystal</small></p><p>{collected >= 10 ? '✓' : '○'} Crystal hunter <small>Collect 10 crystals this visit</small></p><p>{unlocked >= stops.length ? '✓' : '○'} Explorer <small>Visit all {stops.length} destinations</small></p><p>{challenge.best >= 5 ? '✓' : '○'} Fast collector <small>Collect 5 crystals in one run</small></p><small>Run bests are saved in this browser. Visit achievements reset when the page reloads.</small></section>}
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
-    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>TIME <select value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value)}><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label><label>WEATHER <select value={weather} onChange={(event) => setWeather(event.target.value)}><option value="clear">Clear</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
+    <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label>TIME <select value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value)}><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option><option value="auto">Cycle</option></select></label><label>WEATHER <select value={weather} onChange={(event) => setWeather(event.target.value)}><option value="clear">Clear</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
     <div className="drive-touch" aria-label="Touch driving controls">
       <button aria-label="Steer left" {...touchControl('ArrowLeft')}>LEFT</button>

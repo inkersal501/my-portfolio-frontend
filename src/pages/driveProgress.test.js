@@ -25,7 +25,14 @@ test('missions grant rewards once when real progress reaches the target', () => 
 });
 
 test('new progress starts independently of the existing crystal-run best', () => {
-  assert.deepEqual(initialProgress(), { version: 1, zones: [], relics: [], destinations: [], route: false, speed: false, completed: [], xp: 0 });
+  assert.deepEqual(initialProgress(), { version: 1, zones: [], relics: [], destinations: [], route: false, speed: false, drift: false, completed: [], xp: 0 });
+});
+
+test('the driving skill mission grants its reward only once', () => {
+  const first = advanceProgress(initialProgress(), 'drift', true);
+  assert.equal(first.progress.xp, 100);
+  assert.equal(first.earned[0].id, 'drift');
+  assert.equal(advanceProgress(first.progress, 'drift', true).progress.xp, 100);
 });
 
 test('collectibles, speed and destinations grant their own rewards only once', () => {

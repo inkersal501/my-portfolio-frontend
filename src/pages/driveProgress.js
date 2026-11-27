@@ -11,6 +11,7 @@ export const MISSIONS = [
   { id: 'relics', label: 'Find five hidden crystals', target: 5, reward: 150 },
   { id: 'route', label: 'Complete a checkpoint route', target: 1, reward: 125 },
   { id: 'speed', label: 'Reach 90 km/h', target: 1, reward: 100 },
+  { id: 'drift', label: 'Hold a fast turn for 4 seconds', target: 1, reward: 100 },
   { id: 'destinations', label: 'Visit every portfolio destination', target: 5, reward: 200 },
 ];
 
@@ -20,14 +21,14 @@ export function zoneAt(z) {
 }
 
 export function initialProgress() {
-  return { version: 1, zones: [], relics: [], destinations: [], route: false, speed: false, completed: [], xp: 0 };
+  return { version: 1, zones: [], relics: [], destinations: [], route: false, speed: false, drift: false, completed: [], xp: 0 };
 }
 
 export function advanceProgress(current, type, value) {
   const next = { ...current, zones: [...current.zones], relics: [...current.relics], destinations: [...current.destinations], completed: [...current.completed] };
-  if (type === 'route' || type === 'speed') next[type] = true;
+  if (['route', 'speed', 'drift'].includes(type)) next[type] = true;
   else if (['zones', 'relics', 'destinations'].includes(type) && !next[type].includes(value)) next[type].push(value);
-  const counts = { zones: next.zones.length, relics: next.relics.length, route: Number(next.route), speed: Number(next.speed), destinations: next.destinations.length };
+  const counts = { zones: next.zones.length, relics: next.relics.length, route: Number(next.route), speed: Number(next.speed), drift: Number(next.drift), destinations: next.destinations.length };
   const earned = [];
   MISSIONS.forEach((mission) => {
     if (counts[mission.id] >= mission.target && !next.completed.includes(mission.id)) {
