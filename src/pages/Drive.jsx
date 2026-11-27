@@ -332,12 +332,17 @@ export default function Drive() {
 
     // Distinct low-poly district entrances form a legible route along the main road.
     const zonePillarGeometry = new THREE.BoxGeometry(1.1, 4, 1.1);
+    const districtRoadGeometry = new THREE.PlaneGeometry(16, 6);
     const zonePillarMaterial = new THREE.MeshStandardMaterial({ color: 0x495940, roughness: 0.8 });
     const zoneAccentMaterial = new THREE.MeshStandardMaterial({ color: 0xc6f36a, emissive: 0x3b501c, emissiveIntensity: 0.35 });
     const districtLandmarks = [];
     ZONES.forEach((zone, index) => {
       const district = new THREE.Group();
       district.position.set(index % 2 ? 14 : -14, 0, zone.z - 12);
+      const sideRoad = new THREE.Mesh(districtRoadGeometry, roadMaterial);
+      sideRoad.rotation.x = -Math.PI / 2;
+      sideRoad.position.set(index % 2 ? -7 : 7, -0.03, 12);
+      district.add(sideRoad);
       for (const x of [-3.3, 3.3]) {
         const pillar = new THREE.Mesh(zonePillarGeometry, zonePillarMaterial);
         pillar.position.set(x, 2, 0);
@@ -956,12 +961,17 @@ export default function Drive() {
         }
       });
       obstacles.forEach((item) => {
-        if (crashCooldown <= 0 && Math.abs(car.position.x - item.x) < item.radius + 0.7 && Math.abs(car.position.z - item.z) < item.radius + 0.9) {
+        const hit = Math.abs(car.position.x - item.x) < item.radius + 0.7 && Math.abs(car.position.z - item.z) < item.radius + 0.9;
+        const wasInside = Math.abs(previousPosition.x - item.x) < item.radius + 0.7 && Math.abs(previousPosition.z - item.z) < item.radius + 0.9;
+        const movingOut = Math.hypot(car.position.x - item.x, car.position.z - item.z) > Math.hypot(previousPosition.x - item.x, previousPosition.z - item.z);
+        if (hit && (!wasInside || !movingOut)) {
           car.position.copy(previousPosition);
-          velocity *= -0.24;
-          crashCooldown = 0.7;
-          playImpact();
-          announce('BONK! Keep exploring.', 1500);
+          velocity = 0;
+          if (crashCooldown <= 0) {
+            crashCooldown = 0.7;
+            playImpact();
+            announce('BONK! Reverse to move away.', 1500);
+          }
         }
       });
       streetLamps.forEach((lamp) => {
