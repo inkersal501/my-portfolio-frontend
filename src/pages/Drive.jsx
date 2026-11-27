@@ -34,6 +34,8 @@ export default function Drive() {
   const [unlocked, setUnlocked] = useState(0);
   const [destinationMeters, setDestinationMeters] = useState(null);
   const [toast, setToast] = useState('');
+  const [challenge, setChallenge] = useState({ active: false, seconds: 0, score: 0, best: 0 });
+  const challengeRef = useRef({ active: false, elapsed: 0, score: 0, best: 0 });
   const [paused, setPaused] = useState(false);
   const [handling, setHandling] = useState('arcade');
   const [quality, setQuality] = useState('high');
@@ -251,6 +253,12 @@ export default function Drive() {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.14, 0.14), postMaterial);
       bar.position.y = 3.6;
       gate.add(bar);
+      const beacon = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), postMaterial);
+      beacon.position.y = 4.5;
+      gate.add(beacon);
+      const platform = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 0.12, 32), new THREE.MeshStandardMaterial({ color: 0x353c30, roughness: 0.9 }));
+      platform.position.y = -0.01;
+      gate.add(platform);
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: makeTextTexture(stop.label), transparent: true, side: THREE.DoubleSide }));
       sign.position.set(0, 2.8, 0.1);
       gate.add(sign);
@@ -295,7 +303,12 @@ export default function Drive() {
     const pointermove = (event) => { if (pointer.down) { touchSteer = THREE.MathUtils.clamp((event.clientX - canvas.getBoundingClientRect().left) / canvas.clientWidth * 2 - 1, -1, 1); pointer.x = event.clientX; } };
     const pointerup = () => { pointer.down = false; };
     let targetStop = null;
-    const onDestination = (event) => { targetStop = event.detail; };
+    const onDestination = (event) => {
+      const index = stops.findIndex((item) => item.id === event.detail.id);
+      const gate = gateObjects[index];
+      if (gate) targetStop = { ...event.detail, x: gate.position.x, z: gate.position.z };
+    };
+    const startChallenge = () => { challengeRef.current = { active: true, elapsed: 0, score: 0, best: challengeRef.current.best }; setChallenge({ active: true, seconds: 0, score: 0, best: challengeRef.current.best }); };
     const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; currentGear = 1; setGear(1); };
     const onQualityChange = () => resize();
     const playPickup = () => {
@@ -312,6 +325,7 @@ export default function Drive() {
     window.addEventListener('keyup', keyup);
     window.addEventListener('blur', clearControls);
     window.addEventListener('drive-destination', onDestination);
+    window.addEventListener('drive-challenge', startChallenge);
     window.addEventListener('drive-reset', resetCar);
     window.addEventListener('drive-shift', onShift);
     window.addEventListener('drive-quality-change', onQualityChange);
@@ -347,6 +361,16 @@ export default function Drive() {
         renderer.render(scene, camera);
         frame = requestAnimationFrame(animate);
         return;
+      }
+      if (challengeRef.current.active) {
+        challengeRef.current.elapsed += delta;
+        if (challengeRef.current.elapsed >= 60) {
+          const game = challengeRef.current;
+          game.active = false;
+          game.best = Math.max(game.best, game.score);
+          setChallenge({ active: false, seconds: 60, score: game.score, best: game.best });
+          setToast(`TIME UP! ${game.score} CRYSTALS`);
+        }
       }
       const accelerating = keys.has('w') || keys.has('arrowup');
       const reversing = keys.has('s') || keys.has('arrowdown');
@@ -439,6 +463,7 @@ export default function Drive() {
           pickup.mesh.position.set(car.position.x + (Math.random() - 0.5) * 8, 0.65, resetAt);
           window.setTimeout(() => { pickup.found = false; pickup.mesh.visible = true; }, 1800);
             setCollected((count) => count + 1);
+            if (challengeRef.current.active) challengeRef.current.score += 1;
             playPickup();
             setToast('NICE PICKUP!');
             window.setTimeout(() => setToast(''), 1000);
@@ -476,6 +501,7 @@ export default function Drive() {
         speedUpdateAt = now;
         setSpeed(Math.round(Math.abs(velocity) * 9));
         setDestinationMeters(targetStop ? Math.round(Math.hypot(targetStop.x - car.position.x, targetStop.z - car.position.z)) : null);
+        if (challengeRef.current.active) { const game = challengeRef.current; setChallenge({ active: true, seconds: Math.floor(game.elapsed), score: game.score, best: game.best }); }
       }
       frame = requestAnimationFrame(animate);
     }
@@ -489,6 +515,7 @@ export default function Drive() {
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('blur', clearControls);
       window.removeEventListener('drive-destination', onDestination);
+      window.removeEventListener('drive-challenge', startChallenge);
       window.removeEventListener('drive-reset', resetCar);
       window.removeEventListener('drive-shift', onShift);
       window.removeEventListener('drive-quality-change', onQualityChange);
@@ -528,6 +555,7 @@ export default function Drive() {
     </section>}
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>Q / E SHIFT</span><span>SHIFT BOOST · J JUMP</span><i>Collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span>GEAR {gear}</span></div>
+    <div className="drive-challenge"><button onClick={() => window.dispatchEvent(new Event('drive-challenge'))}>{challenge.active ? 'RESTART RUN' : '60-SECOND CRYSTAL RUN'}</button><span>{challenge.active ? `${60 - challenge.seconds}s · ${challenge.score} collected` : `Best: ${challenge.best} crystals`}</span></div>
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
     {toast && <div className="drive-toast" role="status">{toast}</div>}
@@ -537,6 +565,8 @@ export default function Drive() {
       <button aria-label="Steer right" {...touchControl('ArrowRight')}>RIGHT</button>
       <button aria-label="Reverse" {...touchControl('ArrowDown')}>BACK</button>
       <button aria-label="Brake" {...touchControl(' ')}>BRAKE</button>
+      <button aria-label="Boost" {...touchControl('Shift')}>BOOST</button>
+      <button aria-label="Jump" {...touchControl('j')}>JUMP</button>
     </div>
     <nav className="drive-destinations" aria-label="Portfolio destinations">{stops.map((item) => <button key={item.id} onClick={() => { const event = new CustomEvent('drive-destination', { detail: item }); window.dispatchEvent(event); }}>{item.label}</button>)}</nav>
   </main>;
