@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { about, experience, profile, projects, skills } from '../data/portfolio';
+import { guidanceDirection, routePoint } from './driveLogic';
 
 const stops = [
   { id: 'about', label: 'ABOUT', title: 'A little about me', x: -7, z: -20, color: 0xc6f36a },
@@ -28,6 +29,7 @@ function makeTextTexture(text, color = '#f0f1e9') {
 export default function Drive() {
   const canvasRef = useRef(null);
   const [activeStop, setActiveStop] = useState(null);
+  const [nearbyStop, setNearbyStop] = useState(null);
   const [speed, setSpeed] = useState(0);
   const [gear, setGear] = useState(1);
   const [collected, setCollected] = useState(0);
@@ -42,6 +44,7 @@ export default function Drive() {
   });
   const challengeRef = useRef({ active: false, elapsed: 0, score: 0, best: challenge.best });
   const [showAchievements, setShowAchievements] = useState(false);
+  const [routeRun, setRouteRun] = useState({ active: false, index: 0, elapsed: 0, finished: false });
   const [paused, setPaused] = useState(false);
   const [handling, setHandling] = useState('arcade');
   const [quality, setQuality] = useState('high');
@@ -117,6 +120,17 @@ export default function Drive() {
     crossRoad.rotation.x = -Math.PI / 2;
     crossRoad.position.y = -0.034;
     world.add(crossRoad);
+    const sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x41483a, roughness: 1 });
+    for (const side of [-1, 1]) {
+      const sidewalk = new THREE.Mesh(new THREE.PlaneGeometry(3, 10000), sidewalkMaterial);
+      sidewalk.rotation.x = -Math.PI / 2;
+      sidewalk.position.set(side * 6.5, -0.025, 0);
+      world.add(sidewalk);
+      const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 10000), new THREE.MeshBasicMaterial({ color: 0x858f70 }));
+      edge.rotation.x = -Math.PI / 2;
+      edge.position.set(side * 5, -0.015, 0);
+      world.add(edge);
+    }
     const dashMaterial = new THREE.MeshBasicMaterial({ color: 0xc6f36a });
     const laneMarks = [];
     for (let i = -10; i <= 10; i += 1) {
@@ -172,6 +186,11 @@ export default function Drive() {
     const spoiler = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.08, 0.28), new THREE.MeshStandardMaterial({ color: 0x252d21, metalness: 0.25, roughness: 0.5 }));
     spoiler.position.set(0, 0.92, 0.95);
     car.add(spoiler);
+    const boostGlow = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xc6f36a, transparent: true, opacity: 0.8 }));
+    boostGlow.rotation.x = Math.PI / 2;
+    boostGlow.position.set(0, 0.48, 1.48);
+    boostGlow.visible = false;
+    car.add(boostGlow);
     const carShadow = new THREE.Mesh(new THREE.CircleGeometry(1.35, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
     carShadow.rotation.x = -Math.PI / 2;
     carShadow.scale.set(0.7, 1.2, 1);
@@ -212,6 +231,21 @@ export default function Drive() {
     }
     world.add(plaza);
 
+    // A small parking area and approach markings make the plaza read as a place.
+    const parking = new THREE.Group();
+    const paintMaterial = new THREE.MeshBasicMaterial({ color: 0x9cae81, transparent: true, opacity: 0.72 });
+    const lineGeometry = new THREE.PlaneGeometry(0.1, 3.2);
+    for (let i = 0; i < 5; i += 1) {
+      const line = new THREE.Mesh(lineGeometry, paintMaterial);
+      line.rotation.x = -Math.PI / 2;
+      line.position.set(13 + i * 2.5, 0.025, 5);
+      parking.add(line);
+    }
+    const parkingSign = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.6), new THREE.MeshBasicMaterial({ map: makeTextTexture('PARKING'), transparent: true, side: THREE.DoubleSide }));
+    parkingSign.position.set(18, 2.1, 7);
+    parking.add(parkingSign);
+    world.add(parking);
+
     const trees = [];
     const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x59604b, roughness: 1 });
     const leafMaterial = new THREE.MeshStandardMaterial({ color: 0x647e43, roughness: 0.85 });
@@ -230,6 +264,12 @@ export default function Drive() {
     }
 
     const obstacles = [];
+    const buildingMaterials = [0x343b30, 0x454a3a, 0x29392e, 0x263c35, 0x315044, 0x26372f, 0x42332d, 0x514038, 0x382d29].map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+    const windowMaterials = [0xc6f36a, 0x77c6b3, 0xffb878].map((color) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.58 }));
+    const buildingGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const windowGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const entranceMaterial = new THREE.MeshStandardMaterial({ color: 0x1b241b, roughness: 0.85 });
+    const entranceGeometry = new THREE.PlaneGeometry(1, 1);
     for (let i = 0; i < 160; i += 1) {
       const cellX = (i % 10) * 36 - 162;
       const cellZ = Math.floor(i / 10) * 36 - 270;
@@ -241,12 +281,19 @@ export default function Drive() {
       const height = 1.5 + Math.random() * 5;
       const width = 1.5 + Math.random() * 3;
       const district = Math.floor(Math.abs(cellZ) / 90) % 3;
-      const palettes = [[0x343b30, 0x454a3a, 0x29392e], [0x263c35, 0x315044, 0x26372f], [0x42332d, 0x514038, 0x382d29]];
-      const material = new THREE.MeshStandardMaterial({ color: palettes[district][i % 3], roughness: 0.8 });
-      const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, width), material);
+      const material = buildingMaterials[district * 3 + i % 3];
+      const building = new THREE.Mesh(buildingGeometry, material);
+      building.scale.set(width, height, width);
+      if (i % 4 === 0) {
+        const entrance = new THREE.Mesh(entranceGeometry, entranceMaterial);
+        entrance.scale.set(0.32, Math.min(0.5, 1.5 / height), 1);
+        entrance.position.set(0, -0.5 + entrance.scale.y / 2, 0.501);
+        building.add(entrance);
+      }
       building.position.set(x, height / 2 - 0.06, z);
       world.add(building);
-      const windows = new THREE.Mesh(new THREE.BoxGeometry(width * 0.72, 0.08, width * 0.72), new THREE.MeshBasicMaterial({ color: [0xc6f36a, 0x77c6b3, 0xffb878][district], transparent: true, opacity: 0.58 }));
+      const windows = new THREE.Mesh(windowGeometry, windowMaterials[district]);
+      windows.scale.set(width * 0.72, 0.08, width * 0.72);
       windows.position.set(x, height * 0.64, z - width / 2 - 0.012);
       world.add(windows);
       obstacles.push({ x, z, baseX, baseZ, width, height, radius: width * 0.55, building, windows });
@@ -255,11 +302,18 @@ export default function Drive() {
     const streetLamps = [];
     const lampPoleMaterial = new THREE.MeshStandardMaterial({ color: 0x717666, metalness: 0.65, roughness: 0.35 });
     const lampGlowMaterial = new THREE.MeshBasicMaterial({ color: 0xd8ff9a });
+    const signGeometry = new THREE.BoxGeometry(0.9, 0.65, 0.08);
+    const signMaterial = new THREE.MeshStandardMaterial({ color: 0x526447, roughness: 0.8 });
     for (let i = 0; i < 48; i += 1) {
       const z = -i * 18;
       const x = i % 2 ? -7 : 7;
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, 4.2, 8), lampPoleMaterial);
       pole.position.set(x, 2.1, z);
+      if (i % 4 === 0) {
+        const sign = new THREE.Mesh(signGeometry, signMaterial);
+        sign.position.set(0, 0.35, 0);
+        pole.add(sign);
+      }
       world.add(pole);
       const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.08, 0.08), lampPoleMaterial);
       arm.position.set(x + (x < 0 ? 0.35 : -0.35), 4.1, z);
@@ -371,6 +425,28 @@ export default function Drive() {
       pickups.push({ mesh: pickup, found: false });
     }
 
+    // A single reusable beacon marks the next point in a five-gate route.
+    const checkpoint = new THREE.Group();
+    const checkpointMaterial = new THREE.MeshBasicMaterial({ color: 0xc6f36a, transparent: true, opacity: 0.9 });
+    const checkpointRing = new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.1, 8, 48), checkpointMaterial);
+    checkpointRing.position.y = 2.7;
+    checkpoint.add(checkpointRing);
+    const checkpointLabel = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75), new THREE.MeshBasicMaterial({ map: makeTextTexture('CHECKPOINT'), transparent: true, side: THREE.DoubleSide }));
+    checkpointLabel.position.set(0, 5.4, 0);
+    checkpoint.add(checkpointLabel);
+    checkpoint.visible = false;
+    world.add(checkpoint);
+
+    const hiddenRelics = [];
+    const relicGeometry = new THREE.IcosahedronGeometry(0.7, 0);
+    const relicMaterial = new THREE.MeshStandardMaterial({ color: 0xc6f36a, emissive: 0x779e34, emissiveIntensity: 1.4, metalness: 0.45, roughness: 0.25 });
+    for (let i = 0; i < 6; i += 1) {
+      const mesh = new THREE.Mesh(relicGeometry, relicMaterial);
+      mesh.position.set((i % 2 ? -1 : 1) * (18 + (i % 3) * 7), 1.1, -18 - i * 24);
+      world.add(mesh);
+      hiddenRelics.push({ mesh, found: false });
+    }
+
     const keys = new Set();
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const pointer = { down: false, x: 0 };
@@ -386,13 +462,31 @@ export default function Drive() {
     let rampCooldown = 0;
     const discovered = new Set();
     const nearbyGates = new Set();
+    let nearbyDestination = null;
     let speedUpdateAt = 0;
+    let route = null;
+    let toastTimer;
+    const timers = new Set();
+    const later = (callback, delay) => {
+      const timer = window.setTimeout(() => { timers.delete(timer); callback(); }, delay);
+      timers.add(timer);
+      return timer;
+    };
+    const announce = (message, duration = 1800) => {
+      window.clearTimeout(toastTimer);
+      timers.delete(toastTimer);
+      setToast(message);
+      toastTimer = later(() => setToast(''), duration);
+    };
     let frame;
     let visible = true;
     let previous = 0;
-    const shift = (amount) => { currentGear = THREE.MathUtils.clamp(currentGear + amount, 1, 5); setGear(currentGear); };
+    const previousPosition = new THREE.Vector3();
+    const cameraTarget = new THREE.Vector3();
+    const desiredCamera = new THREE.Vector3();
+    const shift = (amount) => { const next = THREE.MathUtils.clamp(currentGear + amount, 1, 5); if (next !== currentGear) { currentGear = next; setGear(currentGear); playEffect(220, 130, 0.09); } };
     const onShift = (event) => shift(event.detail);
-    const keydown = (event) => { const key = event.key.toLowerCase(); if (event.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName)) return; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && (key === 'q' || key === 'e')) shift(key === 'e' ? 1 : -1); if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; keys.add(key); };
+    const keydown = (event) => { const key = event.key.toLowerCase(); if (event.target instanceof HTMLElement && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName)) return; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && (key === 'q' || key === 'e')) shift(key === 'e' ? 1 : -1); if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; if (!event.repeat && key === 'shift' && !keys.has('shift') && !settingsRef.current.paused) playEffect(180, 360, 0.16); if (!event.repeat && key === 'enter' && nearbyDestination) setActiveStop(nearbyDestination.id); if (!event.repeat && key === 'escape') setActiveStop(null); keys.add(key); };
     const keyup = (event) => keys.delete(event.key.toLowerCase());
     const clearControls = () => { keys.clear(); pointer.down = false; touchSteer = 0; };
     const onVisibilityChange = () => {
@@ -404,18 +498,28 @@ export default function Drive() {
         previous = 0;
       }
     };
-    const pointerdown = (event) => { pointer.down = true; pointer.x = event.clientX; canvas.setPointerCapture(event.pointerId); };
-    const pointermove = (event) => { if (pointer.down) { touchSteer = THREE.MathUtils.clamp((event.clientX - canvas.getBoundingClientRect().left) / canvas.clientWidth * 2 - 1, -1, 1); pointer.x = event.clientX; } };
-    const pointerup = () => { pointer.down = false; };
+    const pointerdown = (event) => { pointer.down = true; pointer.x = event.clientX; touchSteer = 0; canvas.setPointerCapture(event.pointerId); };
+    const pointermove = (event) => { if (pointer.down) touchSteer = THREE.MathUtils.clamp((event.clientX - pointer.x) / Math.max(canvas.clientWidth * 0.2, 40), -1, 1); };
+    const pointerup = () => { pointer.down = false; touchSteer = 0; };
     let targetStop = null;
     const onDestination = (event) => {
       if (!event.detail) { targetStop = null; setGuidance(null); return; }
       const index = stops.findIndex((item) => item.id === event.detail.id);
       const gate = gateObjects[index];
-      if (gate) targetStop = { ...event.detail, x: gate.position.x, z: gate.position.z };
+      if (gate) targetStop = { ...event.detail, gate };
     };
     const startChallenge = () => { challengeRef.current = { active: true, elapsed: 0, score: 0, best: challengeRef.current.best }; setChallenge({ active: true, seconds: 0, score: 0, best: challengeRef.current.best, finished: false }); };
-    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; setGuidance(null); currentGear = 1; setGear(1); };
+    const startRoute = () => {
+      const start = { x: car.position.x, z: car.position.z };
+      route = { index: 0, elapsed: 0, points: Array.from({ length: 5 }, (_, i) => { const point = routePoint(start, yaw, i); return new THREE.Vector3(point.x, 0, point.z); }) };
+      checkpoint.position.copy(route.points[0]);
+      checkpoint.position.y = 0;
+      checkpoint.rotation.y = -yaw;
+      checkpoint.visible = true;
+      setRouteRun({ active: true, index: 0, elapsed: 0, finished: false });
+      announce('DRIVE THROUGH THE LIME RINGS IN ORDER');
+    };
+    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; keys.clear(); targetStop = null; setGuidance(null); currentGear = 1; setGear(1); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
     const onQualityChange = () => resize();
     const playPickup = () => {
       if (settingsRef.current.muted || !audioRef.current) return;
@@ -426,6 +530,19 @@ export default function Drive() {
       oscillator.frequency.exponentialRampToValueAtTime(1180, audio.currentTime + 0.11);
       gain.gain.setValueAtTime(0.12, audio.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.18);
       oscillator.connect(gain); gain.connect(audio.destination); oscillator.start(); oscillator.stop(audio.currentTime + 0.18);
+    };
+    const playEffect = (from, to, duration) => {
+      if (settingsRef.current.muted || !audioRef.current) return;
+      const audio = audioRef.current;
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(from, audio.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(to, audio.currentTime + duration);
+      gain.gain.setValueAtTime(0.08, audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + duration);
+      oscillator.connect(gain); gain.connect(audio.destination);
+      oscillator.start(); oscillator.stop(audio.currentTime + duration);
     };
     const playImpact = () => {
       if (settingsRef.current.muted || !audioRef.current) return;
@@ -446,6 +563,7 @@ export default function Drive() {
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('drive-destination', onDestination);
     window.addEventListener('drive-challenge', startChallenge);
+    window.addEventListener('drive-route', startRoute);
     window.addEventListener('drive-reset', resetCar);
     window.addEventListener('drive-shift', onShift);
     window.addEventListener('drive-quality-change', onQualityChange);
@@ -467,7 +585,12 @@ export default function Drive() {
     resizeObserver.observe(canvas);
     const intersection = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
-      if (visible && !frame) frame = requestAnimationFrame(animate);
+      if (visible && !frame) { previous = 0; frame = requestAnimationFrame(animate); }
+      if (!visible) {
+        clearControls();
+        velocity = 0;
+        if (engineRef.current && audioRef.current) engineRef.current.gain.gain.setTargetAtTime(0, audioRef.current.currentTime, 0.05);
+      }
     });
     intersection.observe(canvas);
 
@@ -482,6 +605,7 @@ export default function Drive() {
         frame = requestAnimationFrame(animate);
         return;
       }
+      if (route) route.elapsed += delta;
       if (challengeRef.current.active) {
         challengeRef.current.elapsed += delta;
         if (challengeRef.current.elapsed >= 60) {
@@ -509,12 +633,20 @@ export default function Drive() {
       const grip = settingsRef.current.handling === 'relaxed' ? 1.4 : THREE.MathUtils.lerp(0.95, 0.53, Math.min(Math.abs(velocity) / 10, 1));
       yaw += steer * velocity * delta * grip;
       yaw = THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI;
-      const previousPosition = car.position.clone();
+      previousPosition.copy(car.position);
       car.position.x += Math.sin(yaw) * velocity * delta;
       car.position.z -= Math.cos(yaw) * velocity * delta;
-      car.position.x = THREE.MathUtils.clamp(car.position.x, -5990, 5990);
+      ground.position.x = Math.round(car.position.x / 150) * 150;
+      ground.position.z = Math.round(car.position.z / 150) * 150;
+      groundGrid.position.x = ground.position.x;
+      groundGrid.position.z = ground.position.z;
+      road.position.z = Math.round(car.position.z / 1000) * 1000;
+      crossRoad.position.x = Math.round(car.position.x / 1000) * 1000;
       car.rotation.y = -yaw;
       car.rotation.z = -steer * Math.min(Math.abs(velocity) / 12, 1) * 0.055;
+      tailMaterial.color.setHex(braking || (reversing && velocity > 0.5) ? 0xff3922 : 0x9a392c);
+      boostGlow.visible = accelerating && keys.has('shift') && !reducedMotion.matches;
+      boostGlow.scale.y = 0.8 + Math.abs(velocity) * 0.05;
       if (jumpSpeed !== 0 || jumpHeight > 0) { jumpSpeed -= 18 * delta; jumpHeight += jumpSpeed * delta; if (jumpHeight <= 0) { jumpHeight = 0; jumpSpeed = 0; } }
       car.position.y = jumpHeight + (!reducedMotion.matches && jumpHeight === 0 && Math.abs(velocity) > 0.5 ? Math.sin(now * 0.012) * 0.025 : 0);
       carShadow.position.x = car.position.x;
@@ -522,14 +654,31 @@ export default function Drive() {
       carShadow.rotation.z = yaw;
       carShadow.material.opacity = Math.max(0.08, 0.3 - jumpHeight * 0.08);
       wheels.forEach((wheel) => { wheel.rotation.x -= velocity * delta * 1.7; });
+      if (route) {
+        const point = route.points[route.index];
+        if (Math.hypot(car.position.x - point.x, car.position.z - point.z) < 3) {
+          route.index += 1;
+          playPickup();
+          if (route.index === route.points.length) {
+            setRouteRun({ active: false, index: 5, elapsed: route.elapsed, finished: true });
+            announce(`ROUTE COMPLETE · ${route.elapsed.toFixed(1)} SECONDS`, 3500);
+            playEffect(440, 880, 0.3);
+            setCollected((count) => count + 5);
+            checkpoint.visible = false;
+            route = null;
+          } else {
+            checkpoint.position.copy(route.points[route.index]); checkpoint.position.y = 0;
+            announce(`CHECKPOINT ${route.index} / 5`);
+          }
+        }
+      }
       ramp.position.z += Math.round((car.position.z - ramp.position.z) / 240) * 240;
       ramp.position.x += Math.round((car.position.x - ramp.position.x) / 240) * 240;
       rampCooldown = Math.max(0, rampCooldown - delta);
       if (rampCooldown === 0 && jumpHeight === 0 && Math.abs(velocity) > 2 && Math.abs(car.position.x - ramp.position.x) < 2 && Math.abs(car.position.z - ramp.position.z) < 2) {
         jumpSpeed = 8;
         rampCooldown = 2;
-        setToast('RAMP JUMP!');
-        window.setTimeout(() => setToast(''), 1400);
+        announce('RAMP JUMP!', 1400);
         playPickup();
       }
       crates.forEach((crate) => {
@@ -562,8 +711,7 @@ export default function Drive() {
           velocity *= -0.24;
           crashCooldown = 0.7;
           playImpact();
-          setToast('BONK! Keep it between the curbs.');
-          window.setTimeout(() => setToast(''), 1500);
+          announce('BONK! Keep exploring.', 1500);
         }
       });
       streetLamps.forEach((lamp) => {
@@ -579,22 +727,25 @@ export default function Drive() {
       });
       if (!reducedMotion.matches) sculpture.rotation.y += delta * 0.35;
       laneMarks.forEach((mark, index) => {
-        if (index % 2 === 0) mark.position.z = car.position.z + (index / 2 - 10) * 5;
-        else mark.position.x = car.position.x + (Math.floor(index / 2) - 10) * 5;
+        if (index % 2 === 0) mark.position.z = Math.round(car.position.z / 5) * 5 + (index / 2 - 10) * 5;
+        else mark.position.x = Math.round(car.position.x / 5) * 5 + (Math.floor(index / 2) - 10) * 5;
       });
       crashCooldown -= delta;
+      nearbyDestination = null;
+      let nearestGateDistance = 9;
       gateObjects.forEach((gate, index) => {
         const laps = Math.round((car.position.z - stops[index].z) / 300);
         gate.position.x = stops[index].x + Math.round((car.position.x - stops[index].x) / 300) * 300;
         gate.position.z = stops[index].z + laps * 300;
+        const gateDistance = Math.hypot(car.position.z - gate.position.z, car.position.x - gate.position.x);
+        if (gateDistance < nearestGateDistance) { nearestGateDistance = gateDistance; nearbyDestination = stops[index]; }
         const nearby = Math.abs(car.position.z - gate.position.z) < 2 && Math.abs(car.position.x - gate.position.x) < 3;
         if (nearby && !nearbyGates.has(index)) {
           nearbyGates.add(index);
           discovered.add(index);
           setUnlocked(discovered.size);
           setActiveStop(stops[index].id);
-          setToast(`${stops[index].label} DISCOVERED`);
-          window.setTimeout(() => setToast(''), 2200);
+          announce(`${stops[index].label} DISCOVERED`, 2200);
         }
         if (!nearby) nearbyGates.delete(index);
       });
@@ -610,18 +761,28 @@ export default function Drive() {
           pickup.mesh.visible = false;
           const resetAt = car.position.z - 70 - Math.random() * 100;
           pickup.mesh.position.set(car.position.x + (Math.random() - 0.5) * 8, 0.65, resetAt);
-          window.setTimeout(() => { pickup.found = false; pickup.mesh.visible = true; }, 1800);
+          later(() => { pickup.found = false; pickup.mesh.visible = true; }, 1800);
             setCollected((count) => count + 1);
             if (challengeRef.current.active) challengeRef.current.score += 1;
             playPickup();
-            setToast('NICE PICKUP!');
-            window.setTimeout(() => setToast(''), 1000);
+            announce('NICE PICKUP!', 1000);
           }
         }
       });
+      hiddenRelics.forEach((relic) => {
+        if (relic.found) return;
+        if (!reducedMotion.matches) relic.mesh.rotation.y += delta * 0.6;
+        if (Math.hypot(car.position.x - relic.mesh.position.x, car.position.z - relic.mesh.position.z) < 1.7) {
+          relic.found = true;
+          relic.mesh.visible = false;
+          setCollected((count) => count + 3);
+          playPickup();
+          announce('HIDDEN RELIC FOUND · +3 CRYSTALS', 2600);
+        }
+      });
       if (targetStop) {
-        const dx = targetStop.x - car.position.x;
-        const dz = targetStop.z - car.position.z;
+        const dx = targetStop.gate.position.x - car.position.x;
+        const dz = targetStop.gate.position.z - car.position.z;
         if (Math.hypot(dx, dz) < 3) { setActiveStop(targetStop.id); targetStop = null; setGuidance(null); }
       }
       obstacles.forEach((item) => {
@@ -633,10 +794,12 @@ export default function Drive() {
         item.windows.position.set(item.x, item.height * 0.64, item.z - item.width / 2 - 0.012);
       });
       const mobileView = window.innerWidth < 700;
-      const lookAhead = mobileView ? 3.5 : 5;
+      const lookAhead = (mobileView ? 2.5 : 3.5) + Math.min(Math.abs(velocity) * 0.25, 3);
       const followDistance = mobileView ? 7 : 10;
-      const cameraTarget = new THREE.Vector3(car.position.x + Math.sin(yaw) * lookAhead, mobileView ? 0.55 : 0.7, car.position.z - Math.cos(yaw) * lookAhead);
-      camera.position.lerp(new THREE.Vector3(car.position.x - Math.sin(yaw) * followDistance, mobileView ? 3.8 : 5.2, car.position.z + Math.cos(yaw) * followDistance), 1 - Math.exp(-delta * 3.5));
+      const travelDirection = velocity < -0.5 ? -1 : 1;
+      cameraTarget.set(car.position.x + Math.sin(yaw) * lookAhead * travelDirection, 0.7 + jumpHeight * 0.3, car.position.z - Math.cos(yaw) * lookAhead * travelDirection);
+      desiredCamera.set(car.position.x - Math.sin(yaw) * followDistance * travelDirection, (mobileView ? 3.8 : 5.2) + jumpHeight * 0.35, car.position.z + Math.cos(yaw) * followDistance * travelDirection);
+      camera.position.lerp(desiredCamera, 1 - Math.exp(-delta * (reducedMotion.matches ? 1.8 : 3.5)));
       camera.lookAt(cameraTarget);
       renderer.render(scene, camera);
       if (engineRef.current && audioRef.current) {
@@ -649,13 +812,13 @@ export default function Drive() {
       if (now - speedUpdateAt > 120) {
         speedUpdateAt = now;
         setSpeed(Math.round(Math.abs(velocity) * 9));
-        setDestinationMeters(targetStop ? Math.round(Math.hypot(targetStop.x - car.position.x, targetStop.z - car.position.z)) : null);
+        setNearbyStop(nearbyDestination);
+        setDestinationMeters(targetStop ? Math.round(Math.hypot(targetStop.gate.position.x - car.position.x, targetStop.gate.position.z - car.position.z)) : null);
         if (targetStop) {
-          const angle = Math.atan2(targetStop.x - car.position.x, -(targetStop.z - car.position.z));
-          const turn = THREE.MathUtils.euclideanModulo(angle - yaw + Math.PI, Math.PI * 2) - Math.PI;
-          setGuidance({ label: targetStop.label, direction: Math.abs(turn) > 2.5 ? 'TURN AROUND' : turn > 0.35 ? 'TURN RIGHT' : turn < -0.35 ? 'TURN LEFT' : 'STRAIGHT AHEAD' });
+          setGuidance({ label: targetStop.label, direction: guidanceDirection(car.position.x, car.position.z, yaw, targetStop.gate.position) });
         }
         if (challengeRef.current.active) { const game = challengeRef.current; setChallenge({ active: true, seconds: Math.floor(game.elapsed), score: game.score, best: game.best, finished: false }); }
+        if (route) setRouteRun({ active: true, index: route.index, elapsed: route.elapsed, finished: false });
       }
       frame = requestAnimationFrame(animate);
     }
@@ -671,6 +834,7 @@ export default function Drive() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('drive-destination', onDestination);
       window.removeEventListener('drive-challenge', startChallenge);
+      window.removeEventListener('drive-route', startRoute);
       window.removeEventListener('drive-reset', resetCar);
       window.removeEventListener('drive-shift', onShift);
       window.removeEventListener('drive-quality-change', onQualityChange);
@@ -678,6 +842,7 @@ export default function Drive() {
       canvas.removeEventListener('pointermove', pointermove);
       canvas.removeEventListener('pointerup', pointerup);
       canvas.removeEventListener('pointercancel', pointerup);
+      timers.forEach((timer) => window.clearTimeout(timer));
       scene.traverse((object) => {
         object.geometry?.dispose();
         if (Array.isArray(object.material)) object.material.forEach((material) => { material.map?.dispose(); material.dispose(); });
@@ -701,6 +866,7 @@ export default function Drive() {
     <div className="drive-heading"><span>INKERSAL MAHENDRAN</span><h1>DRIVE TO<br/><em>EXPLORE.</em></h1><p>Full-stack engineer · Chennai, India</p></div>
     <div className="drive-hud"><span className="drive-live"/> OPEN WORLD <span>{String(unlocked).padStart(2, '0')} / {String(stops.length).padStart(2, '0')} STOPS</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
     {guidance && <div className="drive-guidance" role="status"><span>{guidance.label} · {destinationMeters} M</span><strong>{guidance.direction}</strong><button onClick={() => window.dispatchEvent(new CustomEvent('drive-destination', { detail: null }))}>CLEAR</button></div>}
+    {nearbyStop && !stop && <button className="drive-interact" onClick={() => setActiveStop(nearbyStop.id)}>OPEN {nearbyStop.label} <span>· ENTER</span></button>}
     {stop && <section className="drive-card"><button onClick={() => setActiveStop(null)} aria-label="Close destination">×</button><small>{stop.label}</small><h2>{stop.title}</h2>
       {stop.id === 'about' && about.map((text) => <p key={text}>{text}</p>)}
       {stop.id === 'experience' && experience.map((item) => <p key={item.id}><strong>{item.role} · {item.company}</strong><br/>{item.duration}<br/>{item.contribution}</p>)}
@@ -712,6 +878,7 @@ export default function Drive() {
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>Q / E SHIFT</span><span>SHIFT BOOST · J JUMP</span><i>Collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
     <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span>GEAR {gear}</span></div>
     <div className="drive-challenge"><button onClick={() => window.dispatchEvent(new Event('drive-challenge'))}>{challenge.active ? 'RESTART RUN' : '60-SECOND CRYSTAL RUN'}</button><span aria-live="polite">{challenge.active ? `${60 - challenge.seconds}s · ${challenge.score} collected` : challenge.finished ? `Run: ${challenge.score} · Best: ${challenge.best}` : `Best: ${challenge.best} crystals`}</span><button onClick={() => setShowAchievements((value) => !value)} aria-expanded={showAchievements}>ACHIEVEMENTS</button></div>
+    <div className="drive-route"><button onClick={() => window.dispatchEvent(new Event('drive-route'))}>{routeRun.active ? 'RESTART ROUTE' : 'START CHECKPOINT ROUTE'}</button><span>{routeRun.active ? `GATE ${routeRun.index + 1} / 5 · ${routeRun.elapsed.toFixed(1)}s` : routeRun.finished ? `COMPLETE · ${routeRun.elapsed.toFixed(1)}s · +5 CRYSTALS` : '5 GATES · +5 CRYSTALS'}</span></div>
     {showAchievements && <section className="drive-achievements" aria-label="Achievements"><button onClick={() => setShowAchievements(false)} aria-label="Close achievements">×</button><h2>Milestones</h2><p>{collected >= 1 ? '✓' : '○'} First crystal <small>Collect a crystal</small></p><p>{collected >= 10 ? '✓' : '○'} Crystal hunter <small>Collect 10 crystals this visit</small></p><p>{unlocked >= stops.length ? '✓' : '○'} Explorer <small>Visit all {stops.length} destinations</small></p><p>{challenge.best >= 5 ? '✓' : '○'} Fast collector <small>Collect 5 crystals in one run</small></p><small>Run bests are saved in this browser. Visit achievements reset when the page reloads.</small></section>}
     <div className="drive-gears" aria-label="Gear controls"><button aria-label="Shift down" disabled={gear === 1} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: -1 }))}>−</button><span>GEAR {gear}</span><button aria-label="Shift up" disabled={gear === 5} onClick={() => window.dispatchEvent(new CustomEvent('drive-shift', { detail: 1 }))}>+</button></div>
     <div className="drive-settings"><label>HANDLING <select value={handling} onChange={(event) => setHandling(event.target.value)}><option value="arcade">Arcade</option><option value="relaxed">Relaxed</option></select></label><label>QUALITY <select value={quality} onChange={(event) => { setQuality(event.target.value); requestAnimationFrame(() => window.dispatchEvent(new Event('drive-quality-change'))); }}><option value="high">High</option><option value="low">Low</option></select></label><button onClick={() => setPaused((value) => !value)}>{paused ? 'RESUME' : 'PAUSE'}</button><button onClick={() => window.dispatchEvent(new CustomEvent('drive-reset'))}>RESET CAR</button><button onClick={toggleSound}>{muted ? 'ENABLE SOUND' : 'MUTE SOUND'}</button></div>
