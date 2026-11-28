@@ -185,13 +185,16 @@ export default function Drive() {
     world.add(groundGrid);
 
     // Reused low-poly terrain patches form gentle hills away from the main road.
-    const hillGeometry = new THREE.PlaneGeometry(2, 2, 24, 24);
+    const hillProfile = (x, z) => {
+      const base = Math.max(0, 1 - x * x - z * z);
+      return base * base * (0.82 + 0.18 * Math.cos(x * 5) * Math.cos(z * 4));
+    };
+    const hillGeometry = new THREE.PlaneGeometry(2, 2, 32, 32);
     const hillVertices = hillGeometry.attributes.position;
     for (let i = 0; i < hillVertices.count; i += 1) {
       const x = hillVertices.getX(i);
       const y = hillVertices.getY(i);
-      const shape = Math.max(0, 1 - x * x - y * y);
-      hillVertices.setZ(i, shape * shape);
+      hillVertices.setZ(i, hillProfile(x, y));
     }
     hillGeometry.computeVertexNormals();
     const hillMaterial = new THREE.MeshStandardMaterial({ color: 0x43583a, roughness: 1, side: THREE.DoubleSide });
@@ -201,11 +204,16 @@ export default function Drive() {
       { x: -48, z: -165, radius: 16, height: 3.5 },
       { x: 48, z: -195, radius: 18, height: 4.5 },
       { x: -30, z: -210, radius: 14, height: 2.8 },
+      { x: 68, z: -110, radius: 22, height: 5 },
+      { x: -83, z: -190, radius: 20, height: 5.5 },
+      { x: 24, z: -245, radius: 13, height: 2.5 },
+      { x: -58, z: -255, radius: 19, height: 4 },
     ].map((hill) => {
       const mesh = new THREE.Mesh(hillGeometry, hillMaterial);
       mesh.rotation.x = -Math.PI / 2;
       mesh.scale.set(hill.radius, hill.radius, hill.height);
-      mesh.position.set(hill.x, -0.075, hill.z);
+      // Sink the flat edge below the ground to avoid overlapping surfaces flickering.
+      mesh.position.set(hill.x, -0.12, hill.z);
       world.add(mesh);
       return { ...hill, mesh };
     });
@@ -214,8 +222,7 @@ export default function Drive() {
       for (const hill of hills) {
         const dx = (x - hill.mesh.position.x) / hill.radius;
         const dz = (z - hill.mesh.position.z) / hill.radius;
-        const shape = Math.max(0, 1 - dx * dx - dz * dz);
-        height = Math.max(height, hill.height * shape * shape - 0.075);
+        height = Math.max(height, hill.height * hillProfile(dx, dz) - 0.12);
       }
       return height;
     };
@@ -226,7 +233,7 @@ export default function Drive() {
     world.add(road);
     const crossRoad = new THREE.Mesh(new THREE.PlaneGeometry(10000, 10), roadMaterial);
     crossRoad.rotation.x = -Math.PI / 2;
-    crossRoad.position.y = -0.034;
+    crossRoad.position.y = -0.012;
     world.add(crossRoad);
     const sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x41483a, roughness: 1 });
     for (const side of [-1, 1]) {
@@ -249,7 +256,7 @@ export default function Drive() {
       laneMarks.push(dash);
       const sideDash = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 2.1), dashMaterial);
       sideDash.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
-      sideDash.position.set(i * 5, 0.01, 0);
+      sideDash.position.set(i * 5, 0.018, 0);
       world.add(sideDash);
       laneMarks.push(sideDash);
     }
@@ -474,7 +481,7 @@ export default function Drive() {
       district.position.set(index % 2 ? 14 : -14, 0, zone.z - 12);
       const sideRoad = new THREE.Mesh(districtRoadGeometry, roadMaterial);
       sideRoad.rotation.x = -Math.PI / 2;
-      sideRoad.position.set(index % 2 ? -7 : 7, -0.03, 12);
+      sideRoad.position.set(index % 2 ? -7 : 7, -0.005, 12);
       district.add(sideRoad);
       for (const x of [-3.3, 3.3]) {
         const pillar = new THREE.Mesh(zonePillarGeometry, zonePillarMaterial);
@@ -1249,6 +1256,7 @@ export default function Drive() {
       trees.forEach((tree) => {
         tree.position.z += Math.round((car.position.z - tree.position.z) / 280) * 280;
         tree.position.x += Math.round((car.position.x - tree.position.x) / 280) * 280;
+        tree.position.y = terrainHeightAt(tree.position.x, tree.position.z);
       });
       if (!reducedMotion.matches) sculpture.rotation.y += delta * 0.35;
       laneMarks.forEach((mark, index) => {
@@ -1317,8 +1325,9 @@ export default function Drive() {
         const lapZ = Math.round((car.position.z - item.z) / 360) * 360;
         item.x += lapX;
         item.z += lapZ;
-        item.building.position.set(item.x, item.height / 2 - 0.06, item.z);
-        item.windows.position.set(item.x, item.height * 0.64, item.z - item.width / 2 - 0.012);
+        const baseHeight = terrainHeightAt(item.x, item.z);
+        item.building.position.set(item.x, baseHeight + item.height / 2 - 0.06, item.z);
+        item.windows.position.set(item.x, baseHeight + item.height * 0.64, item.z - item.width / 2 - 0.012);
       });
       headquartersInRange = false;
       districtLandmarks.forEach(({ mesh, baseZ, id }) => {
