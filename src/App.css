@@ -36,3 +36,18 @@
 .drive-speed .drive-transmission{display:inline;color:#e6f4d4;border-left:1px solid #9ab27a66;padding-left:8px;font-size:11px}
 /* Quiet, legible driving HUD */
 .drive-menu-toggle{border-radius:999px;background:#172017e8;border-color:#9db58966;padding:11px 18px;box-shadow:0 8px 24px #0003;backdrop-filter:blur(10px)}.drive-menu-toggle:hover{border-color:#c6f36a;color:#c6f36a}.drive-hud{gap:10px;padding:10px 14px;border:1px solid #b3ca8c30;border-radius:12px;background:#111911c9;backdrop-filter:blur(10px);box-shadow:0 8px 24px #0002}.drive-hud span:last-child{margin-left:0}.drive-speed{border:1px solid #b3ca8c38;border-left:2px solid #c6f36a;border-radius:10px;background:#111911db;box-shadow:0 8px 28px #0004;backdrop-filter:blur(10px)}.drive-guidance,.drive-card,.drive-world-panel,.drive-achievements,.drive-photo-panel{border-radius:12px}.drive-world-menu button,.drive-destinations button,.drive-settings button,.drive-challenge button,.drive-route button{border-radius:6px}.drive-toast,.drive-speed-zone,.drive-interact{border-radius:8px}@media(max-width:700px){.drive-hud{right:auto;max-width:calc(100% - 32px);padding:8px 10px;gap:7px;font-size:8px}.drive-menu-toggle{top:15px;right:14px}.drive-speed{bottom:14px}.drive-guidance{max-width:calc(100% - 28px)}}
+
+/* Destination cards stay readable without interrupting the drive. */
+.drive-card{transform-origin:right center;animation:destination-enter .4s cubic-bezier(.16,1,.3,1) both;background:linear-gradient(150deg,#1c271ceF,#101710f7);border:1px solid #c6f36a55;box-shadow:0 24px 70px #0008,0 0 30px #a6d8560c}
+.drive-card.is-closing{pointer-events:none;animation:destination-exit .24s ease-in forwards}
+.drive-card small{color:#c6f36a;letter-spacing:.16em}
+.drive-card h2{color:#f2f6eb;line-height:1.1}
+.drive-card p{line-height:1.75;border-color:#d7edb521}
+.drive-card a{text-decoration-color:#c6f36a88;text-underline-offset:4px}
+.drive-card a:focus-visible,.drive-card button:focus-visible{outline:2px solid #c6f36a;outline-offset:3px}
+@keyframes destination-enter{from{opacity:0;transform:translateY(-50%) translateX(18px) scale(.94)}to{opacity:1;transform:translateY(-50%) translateX(0) scale(1)}}
+@keyframes destination-exit{from{opacity:1;transform:translateY(-50%) scale(1)}to{opacity:0;transform:translateY(-50%) translateX(12px) scale(.96)}}
+@media(max-width:700px){.drive-card{transform-origin:center bottom;animation:destination-mobile-enter .4s cubic-bezier(.16,1,.3,1) both}.drive-card.is-closing{animation:destination-mobile-exit .24s ease-in forwards}}
+@keyframes destination-mobile-enter{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes destination-mobile-exit{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(10px) scale(.97)}}
+@media(prefers-reduced-motion:reduce){.drive-card,.drive-card.is-closing{animation:none}}

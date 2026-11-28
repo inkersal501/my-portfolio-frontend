@@ -29,7 +29,31 @@ function makeTextTexture(text, color = '#f0f1e9') {
 
 export default function Drive() {
   const canvasRef = useRef(null);
+  const [savedSettings] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem('portfolio-drive-settings-v1') || '{}');
+      return saved && saved.version === 1 ? saved : {};
+    } catch { return {}; }
+  });
   const [activeStop, setActiveStop] = useState(null);
+  const [panelClosing, setPanelClosing] = useState(false);
+  const activeStopRef = useRef(null);
+  const panelTimerRef = useRef(null);
+  const openStop = (id) => {
+    window.clearTimeout(panelTimerRef.current);
+    activeStopRef.current = id;
+    setPanelClosing(false);
+    setActiveStop(id);
+  };
+  const closeStop = () => {
+    if (!activeStopRef.current) return;
+    activeStopRef.current = null;
+    setPanelClosing(true);
+    window.clearTimeout(panelTimerRef.current);
+    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240;
+    panelTimerRef.current = window.setTimeout(() => { setActiveStop(null); setPanelClosing(false); }, delay);
+  };
+  useEffect(() => () => window.clearTimeout(panelTimerRef.current), []);
   const [nearbyStop, setNearbyStop] = useState(null);
   const [nearHeadquarters, setNearHeadquarters] = useState(false);
   const [speed, setSpeed] = useState(0);
@@ -53,8 +77,8 @@ export default function Drive() {
   const stuntBestRef = useRef(stuntBest);
   const [speedZoneMessage, setSpeedZoneMessage] = useState('');
   const [paused, setPaused] = useState(false);
-  const [handling, setHandling] = useState('arcade');
-  const [quality, setQuality] = useState('high');
+  const [handling, setHandling] = useState(() => ['arcade', 'relaxed'].includes(savedSettings.handling) ? savedSettings.handling : 'arcade');
+  const [quality, setQuality] = useState(() => ['high', 'medium', 'low'].includes(savedSettings.quality) ? savedSettings.quality : 'high');
   const [muted, setMuted] = useState(true);
   const [webglError, setWebglError] = useState(false);
   const [zoneName, setZoneName] = useState('City Center');
@@ -67,8 +91,8 @@ export default function Drive() {
   });
   const [showGarage, setShowGarage] = useState(false);
   const [showTutorial, setShowTutorial] = useState(() => { try { return window.localStorage.getItem('portfolio-drive-tutorial-v1') !== 'done'; } catch { return true; } });
-  const [timeOfDay, setTimeOfDay] = useState('night');
-  const [weather, setWeather] = useState('clear');
+  const [timeOfDay, setTimeOfDay] = useState(() => ['day', 'sunset', 'night', 'auto'].includes(savedSettings.timeOfDay) ? savedSettings.timeOfDay : 'night');
+  const [weather, setWeather] = useState(() => ['clear', 'rain', 'fog'].includes(savedSettings.weather) ? savedSettings.weather : 'clear');
   const [photoMode, setPhotoMode] = useState(false);
   const [photoCamera, setPhotoCamera] = useState({ angle: 0, distance: 9, height: 5 });
   const [garage, setGarage] = useState(() => {
@@ -98,6 +122,7 @@ export default function Drive() {
 
   useEffect(() => { try { window.localStorage.setItem('portfolio-drive-garage-v2', JSON.stringify({ version: 2, ...garage })); } catch { /* Keep settings for this visit. */ } }, [garage]);
   useEffect(() => { try { window.localStorage.setItem('portfolio-drive-story-v1', JSON.stringify(storyVisited)); } catch { /* Story remains available for this visit. */ } }, [storyVisited]);
+  useEffect(() => { try { window.localStorage.setItem('portfolio-drive-settings-v1', JSON.stringify({ version: 1, handling, quality, timeOfDay, weather })); } catch { /* Settings remain available for this visit. */ } }, [handling, quality, timeOfDay, weather]);
 
   const toggleSound = async () => {
     if (!audioRef.current) {
@@ -844,7 +869,7 @@ export default function Drive() {
     const previousPosition = new THREE.Vector3();
     const cameraTarget = new THREE.Vector3();
     const desiredCamera = new THREE.Vector3();
-    const keydown = (event) => { const key = event.key.toLowerCase(); if (event.target instanceof HTMLElement && (['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName) || event.target.isContentEditable || (event.target.tagName === 'BUTTON' && [' ', 'enter'].includes(key)))) return; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && key === 'escape') { setMenuOpen(false); setActiveStop(null); setShowGarage(false); setShowStory(false); setShowMissions(false); setShowAchievements(false); setPhotoMode(false); clearControls(); return; } if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; if (!event.repeat && key === 'shift' && !keys.has('shift') && !settingsRef.current.paused) playEffect(180, 360, 0.16); if (!event.repeat && key === 'enter' && nearbyDestination) setActiveStop(nearbyDestination.id); else if (!event.repeat && key === 'enter' && headquartersInRange) { setStoryStep(0); setStoryVisited((visited) => visited.includes(0) ? visited : [...visited, 0]); setShowStory(true); } keys.add(key); };
+    const keydown = (event) => { const key = event.key.toLowerCase(); if (event.target instanceof HTMLElement && (['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName) || event.target.isContentEditable || (event.target.tagName === 'BUTTON' && [' ', 'enter'].includes(key)))) return; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && key === 'escape') { setMenuOpen(false); closeStop(); setShowGarage(false); setShowStory(false); setShowMissions(false); setShowAchievements(false); setPhotoMode(false); clearControls(); return; } if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; if (!event.repeat && key === 'shift' && !keys.has('shift') && !settingsRef.current.paused) playEffect(180, 360, 0.16); if (!event.repeat && key === 'enter' && nearbyDestination) openStop(nearbyDestination.id); else if (!event.repeat && key === 'enter' && headquartersInRange) { setStoryStep(0); setStoryVisited((visited) => visited.includes(0) ? visited : [...visited, 0]); setShowStory(true); } keys.add(key); };
     const keyup = (event) => keys.delete(event.key.toLowerCase());
     const clearControls = () => { keys.clear(); touchKeys.clear(); pointer.down = false; touchSteer = 0; };
     const onTouchControl = (event) => {
@@ -1288,12 +1313,17 @@ export default function Drive() {
           nearbyGates.add(index);
           discovered.add(index);
           setUnlocked(discovered.size);
-          setActiveStop(stops[index].id);
+          openStop(stops[index].id);
           announce(`${stops[index].label} DISCOVERED`, 2200);
           recordProgress('destinations', stops[index].id);
         }
         if (!nearby) nearbyGates.delete(index);
       });
+      if (activeStopRef.current) {
+        const activeIndex = stops.findIndex((item) => item.id === activeStopRef.current);
+        const activeGate = gateObjects[activeIndex];
+        if (activeGate && Math.hypot(car.position.x - activeGate.position.x, car.position.z - activeGate.position.z) > 11) closeStop();
+      }
       pickups.forEach((pickup) => {
         if (!pickup.found) {
           const lap = Math.round((car.position.z - pickup.mesh.position.z) / 220) * 220;
@@ -1329,7 +1359,7 @@ export default function Drive() {
       if (targetStop) {
         const dx = targetStop.gate.position.x - car.position.x;
         const dz = targetStop.gate.position.z - car.position.z;
-        if (Math.hypot(dx, dz) < 3) { setActiveStop(targetStop.id); targetStop = null; setGuidance(null); }
+        if (Math.hypot(dx, dz) < 3) { openStop(targetStop.id); targetStop = null; setGuidance(null); }
       }
       obstacles.forEach((item) => {
         const lapX = Math.round((car.position.x - item.x) / 360) * 360;
@@ -1437,9 +1467,9 @@ export default function Drive() {
     <div className="drive-heading"><span>INKERSAL MAHENDRAN</span><h1>DRIVE TO<br/><em>EXPLORE.</em></h1><p>Full-stack engineer · Chennai, India</p></div>
     <div className="drive-hud"><span className="drive-live"/> {zoneName.toUpperCase()} <span>LVL {Math.floor(progress.xp / 150) + 1} · {progress.xp} XP</span><span>CRYSTALS {String(collected).padStart(2, '0')}</span>{destinationMeters !== null && <span>NEXT {destinationMeters}M</span>}</div>
     {guidance && <div className="drive-guidance" role="status"><span>{guidance.label} · {destinationMeters} M</span><strong>{guidance.direction}</strong><button onClick={() => window.dispatchEvent(new CustomEvent('drive-destination', { detail: null }))}>CLEAR</button></div>}
-    {nearbyStop && !stop && <button className="drive-interact" onClick={() => setActiveStop(nearbyStop.id)}>OPEN {nearbyStop.label} <span>· ENTER</span></button>}
+    {nearbyStop && !stop && <button className="drive-interact" onClick={() => openStop(nearbyStop.id)}>OPEN {nearbyStop.label} <span>· ENTER</span></button>}
     {nearHeadquarters && !nearbyStop && !stop && !showStory && <button className="drive-interact" onClick={() => { setShowStory(true); openStoryStep(0); }}>OPEN DEVELOPER JOURNEY <span>· ENTER</span></button>}
-    {stop && <section className="drive-card"><button onClick={() => setActiveStop(null)} aria-label="Close destination">×</button><small>{stop.label}</small><h2>{stop.title}</h2>
+    {stop && <section key={stop.id} className={`drive-card${panelClosing ? ' is-closing' : ''}`} aria-label={`${stop.title} information`}><button onClick={closeStop} aria-label="Close destination">×</button><small>{stop.label}</small><h2>{stop.title}</h2>
       {stop.id === 'about' && about.map((text) => <p key={text}>{text}</p>)}
       {stop.id === 'experience' && experience.map((item) => <p key={item.id}><strong>{item.role} · {item.company}</strong><br/>{item.duration}<br/>{item.contribution}</p>)}
       {stop.id === 'projects' && projects.map((item) => <p key={item.id}><a href={item.link} target="_blank" rel="noreferrer"><strong>{item.title} ↗</strong></a><br/>{item.tech}</p>)}
