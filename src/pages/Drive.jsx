@@ -33,6 +33,7 @@ export default function Drive() {
   const [nearbyStop, setNearbyStop] = useState(null);
   const [nearHeadquarters, setNearHeadquarters] = useState(false);
   const [speed, setSpeed] = useState(0);
+  const [transmission, setTransmission] = useState('D1');
   const [collected, setCollected] = useState(0);
   const [unlocked, setUnlocked] = useState(0);
   const [destinationMeters, setDestinationMeters] = useState(null);
@@ -742,6 +743,9 @@ export default function Drive() {
     const pointer = { down: false, x: 0 };
     let touchSteer = 0;
     let velocity = 0;
+    let automaticGear = 1;
+    let shiftDip = 0;
+    const shiftPoints = [3, 5.5, 8, 10.5];
     let jumpHeight = 0;
     let jumpSpeed = 0;
     let jumpStart = null;
@@ -828,7 +832,7 @@ export default function Drive() {
       setRouteRun({ active: true, index: 0, elapsed: 0, finished: false });
       announce('DRIVE THROUGH THE LIME RINGS IN ORDER');
     };
-    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; steer = 0; jumpHeight = 0; jumpSpeed = 0; jumpStart = null; keys.clear(); targetStop = null; setGuidance(null); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
+    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; automaticGear = 1; shiftDip = 0; setTransmission('D1'); steer = 0; jumpHeight = 0; jumpSpeed = 0; jumpStart = null; keys.clear(); targetStop = null; setGuidance(null); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
     const resetProgressObjects = () => { discovered.clear(); nearbyGates.clear(); setUnlocked(0); lastZone = ''; hiddenRelics.forEach((relic) => { relic.found = false; relic.mesh.visible = true; }); };
     const onQualityChange = () => resize();
     const capturePhoto = () => {
@@ -1036,8 +1040,15 @@ export default function Drive() {
       });
         const vehicleSpeed = ['suv', 'xuv700'].includes(settingsRef.current.garage.vehicle) ? 0.82 : settingsRef.current.garage.vehicle === 'supercar' ? 1.18 : 1;
         const targetVelocity = braking ? 0 : accelerating ? 12 * vehicleSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
-        const response = braking ? 12 : (accelerating || reversing ? 1.6 : 0.8);
+        const response = braking ? 12 : accelerating ? Math.max(0.7, 1.7 - (automaticGear - 1) * 0.16) : reversing ? 1.6 : 0.8;
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
+      const oldGear = automaticGear;
+      if (velocity > 0) {
+        while (automaticGear < 5 && velocity > shiftPoints[automaticGear - 1] + 0.25) automaticGear += 1;
+        while (automaticGear > 1 && velocity < shiftPoints[automaticGear - 2] - 0.35) automaticGear -= 1;
+      } else if (velocity < -0.2) automaticGear = 1;
+      if (oldGear !== automaticGear) shiftDip = 0.28;
+      shiftDip = Math.max(0, shiftDip - delta);
       const onDistrictRoad = districtLandmarks.some(({ mesh }, index) => Math.abs(car.position.x - (mesh.position.x + (index % 2 ? -7 : 7))) < 8 && Math.abs(car.position.z - (mesh.position.z + 12)) < 3);
       const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35 && !onDistrictRoad;
       if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, ['suv', 'xuv700'].includes(settingsRef.current.garage.vehicle) ? 9 : 7);
@@ -1273,7 +1284,10 @@ export default function Drive() {
       camera.lookAt(cameraTarget);
       renderer.render(scene, camera);
       if (engineRef.current && audioRef.current) {
-        const revs = Math.min(Math.abs(velocity) / 12, 1);
+        const gearStart = automaticGear === 1 ? 0 : shiftPoints[automaticGear - 2];
+        const gearEnd = automaticGear === 5 ? 14 : shiftPoints[automaticGear - 1];
+        const gearPosition = velocity < 0 ? Math.abs(velocity) / 3.5 : (velocity - gearStart) / (gearEnd - gearStart);
+        const revs = THREE.MathUtils.clamp(0.25 + gearPosition * 0.65 - shiftDip * 0.6, 0.2, 1);
         const frequency = 48 + revs * 72;
         engineRef.current.voices.forEach(({ oscillator, ratio }) => oscillator.frequency.setTargetAtTime(frequency * ratio, audioRef.current.currentTime, 0.15));
         engineRef.current.filter.frequency.setTargetAtTime(320 + revs * 430, audioRef.current.currentTime, 0.15);
@@ -1283,6 +1297,7 @@ export default function Drive() {
       if (now - speedUpdateAt > 120) {
         speedUpdateAt = now;
         setSpeed(Math.round(Math.abs(velocity) * 9));
+        setTransmission(velocity < -0.2 ? 'R' : `D${automaticGear}`);
         setNearbyStop(nearbyDestination);
         setNearHeadquarters(headquartersInRange);
         setDestinationMeters(targetStop ? Math.round(Math.hypot(targetStop.gate.position.x - car.position.x, targetStop.gate.position.z - car.position.z)) : null);
@@ -1361,7 +1376,7 @@ export default function Drive() {
       {stop.id === 'about' && <p><a href={profile.github} target="_blank" rel="noreferrer">GitHub ↗</a> · <a href={profile.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a> · <a href={profile.leetcode} target="_blank" rel="noreferrer">LeetCode ↗</a></p>}
     </section>}
     <div className="drive-controls"><strong>DRIVE</strong><span>W A S D</span><span>↑ ← ↓ →</span><span>SPACE BRAKE</span><span>SHIFT BOOST · J JUMP</span><i>Collect the glowing crystals</i><a href={profile.resume} target="_blank" rel="noreferrer">RESUME ↗</a></div>
-    <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span></div>
+    <div className="drive-speed"><strong>{speed}</strong><span>KM/H</span><span className="drive-transmission" aria-label={`Automatic transmission ${transmission}`}>{transmission}</span></div>
     <div className={`drive-challenge${challenge.active ? ' is-running' : ''}`}><button onClick={() => window.dispatchEvent(new Event('drive-challenge'))}>{challenge.active ? 'RESTART RUN' : '60-SECOND CRYSTAL RUN'}</button><span aria-live="polite">{challenge.active ? `${60 - challenge.seconds}s · ${challenge.score} collected` : challenge.finished ? `Run: ${challenge.score} · Best: ${challenge.best}` : `Best: ${challenge.best} crystals`}</span><button onClick={() => setShowAchievements((value) => !value)} aria-expanded={showAchievements}>ACHIEVEMENTS</button></div>
     <div className={`drive-route${routeRun.active ? ' is-running' : ''}`}><button onClick={() => window.dispatchEvent(new Event('drive-route'))}>{routeRun.active ? 'RESTART ROUTE' : 'START CHECKPOINT ROUTE'}</button><span>{routeRun.active ? `GATE ${routeRun.index + 1} / 5 · ${routeRun.elapsed.toFixed(1)}s` : routeRun.finished ? `COMPLETE · ${routeRun.elapsed.toFixed(1)}s · +5 CRYSTALS` : '5 GATES · +5 CRYSTALS'}{routeBest !== null ? ` · BEST ${routeBest.toFixed(1)}s` : ''}</span></div>
     <div className="drive-world-menu" id="drive-menu-actions"><button onClick={() => setShowMissions((value) => !value)} aria-expanded={showMissions}>MISSIONS</button><button onClick={() => setShowGarage(true)}>GARAGE</button><button onClick={() => { setShowStory(true); openStoryStep(0); }}>JOURNEY</button><button onClick={() => setPhotoMode(true)}>PHOTO</button></div>
