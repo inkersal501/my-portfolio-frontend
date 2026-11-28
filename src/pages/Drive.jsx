@@ -782,6 +782,7 @@ export default function Drive() {
     }
 
     const keys = new Set();
+    const touchKeys = new Set();
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const pointer = { down: false, x: 0 };
     let touchSteer = 0;
@@ -845,7 +846,14 @@ export default function Drive() {
     const desiredCamera = new THREE.Vector3();
     const keydown = (event) => { const key = event.key.toLowerCase(); if (event.target instanceof HTMLElement && (['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName) || event.target.isContentEditable || (event.target.tagName === 'BUTTON' && [' ', 'enter'].includes(key)))) return; if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault(); if (!event.repeat && key === 'escape') { setMenuOpen(false); setActiveStop(null); setShowGarage(false); setShowStory(false); setShowMissions(false); setShowAchievements(false); setPhotoMode(false); clearControls(); return; } if (!event.repeat && key === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7; if (!event.repeat && key === 'shift' && !keys.has('shift') && !settingsRef.current.paused) playEffect(180, 360, 0.16); if (!event.repeat && key === 'enter' && nearbyDestination) setActiveStop(nearbyDestination.id); else if (!event.repeat && key === 'enter' && headquartersInRange) { setStoryStep(0); setStoryVisited((visited) => visited.includes(0) ? visited : [...visited, 0]); setShowStory(true); } keys.add(key); };
     const keyup = (event) => keys.delete(event.key.toLowerCase());
-    const clearControls = () => { keys.clear(); pointer.down = false; touchSteer = 0; };
+    const clearControls = () => { keys.clear(); touchKeys.clear(); pointer.down = false; touchSteer = 0; };
+    const onTouchControl = (event) => {
+      const { key, pressed } = event.detail;
+      const normalized = key.toLowerCase();
+      if (pressed) touchKeys.add(normalized); else touchKeys.delete(normalized);
+      if (pressed && normalized === 'j' && jumpHeight === 0 && !settingsRef.current.paused) jumpSpeed = 7;
+      if (pressed && normalized === 'shift' && !settingsRef.current.paused) playEffect(180, 360, 0.16);
+    };
     const onVisibilityChange = () => {
       if (document.hidden) {
         clearControls();
@@ -877,7 +885,7 @@ export default function Drive() {
       setRouteRun({ active: true, index: 0, elapsed: 0, finished: false });
       announce('DRIVE THROUGH THE LIME RINGS IN ORDER');
     };
-    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; automaticGear = 1; shiftDip = 0; setTransmission('D1'); steer = 0; jumpHeight = 0; jumpSpeed = 0; jumpStart = null; keys.clear(); targetStop = null; setGuidance(null); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
+    const resetCar = () => { car.position.set(0, 0, 8); yaw = 0; velocity = 0; automaticGear = 1; shiftDip = 0; setTransmission('D1'); steer = 0; jumpHeight = 0; jumpSpeed = 0; jumpStart = null; clearControls(); targetStop = null; setGuidance(null); route = null; checkpoint.visible = false; setRouteRun({ active: false, index: 0, elapsed: 0, finished: false }); };
     const resetProgressObjects = () => { discovered.clear(); nearbyGates.clear(); setUnlocked(0); lastZone = ''; hiddenRelics.forEach((relic) => { relic.found = false; relic.mesh.visible = true; }); };
     const onQualityChange = () => resize();
     const capturePhoto = () => {
@@ -933,6 +941,7 @@ export default function Drive() {
     };
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
+    window.addEventListener('drive-touch-control', onTouchControl);
     window.addEventListener('blur', clearControls);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('drive-destination', onDestination);
@@ -1067,12 +1076,14 @@ export default function Drive() {
           setToast(`TIME UP! ${game.score} CRYSTALS`);
         }
       }
-      const accelerating = keys.has('w') || keys.has('arrowup');
+      const accelerating = keys.has('w') || keys.has('arrowup') || touchKeys.has('arrowup');
       if (!progressRef.current.speed && Math.abs(velocity) * 9 >= 90) recordProgress('speed', true);
-      const reversing = keys.has('s') || keys.has('arrowdown');
-      const braking = keys.has(' ');
-      const left = keys.has('a') || keys.has('arrowleft');
-      const right = keys.has('d') || keys.has('arrowright');
+      const reversing = keys.has('s') || keys.has('arrowdown') || touchKeys.has('arrowdown');
+      const braking = keys.has(' ') || touchKeys.has(' ');
+      const left = keys.has('a') || keys.has('arrowleft') || touchKeys.has('arrowleft');
+      const right = keys.has('d') || keys.has('arrowright') || touchKeys.has('arrowright');
+      const boosting = keys.has('shift') || touchKeys.has('shift');
+      const mobileCreep = touchKeys.has('arrowleft') !== touchKeys.has('arrowright');
       const direction = pointer.down ? touchSteer : Number(right) - Number(left);
       const signalRedPhase = Math.floor(now / 8000) % 2 === 0;
       signal.position.z = -30 + Math.round((car.position.z + 30) / 300) * 300;
@@ -1088,7 +1099,7 @@ export default function Drive() {
         const shiftPoints = isSupercar ? supercarShiftPoints : regularShiftPoints;
         const vehicleSpeed = ['suv', 'xuv700', 'trail'].includes(settingsRef.current.garage.vehicle) ? 0.82 : 1;
         const topSpeed = isSupercar ? 40 : 12 * vehicleSpeed;
-        const targetVelocity = braking ? 0 : accelerating ? topSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
+        const targetVelocity = braking ? 0 : accelerating ? topSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (boosting ? 1.35 : 1) : reversing ? -3.5 : mobileCreep && Math.abs(velocity) < 2 ? 1.8 : 0;
         const response = braking ? 12 : accelerating ? (isSupercar ? 0.45 : Math.max(0.7, 1.7 - (automaticGear - 1) * 0.16)) : reversing ? 1.6 : 0.8;
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
       const oldGear = automaticGear;
@@ -1101,14 +1112,14 @@ export default function Drive() {
       const onDistrictRoad = districtLandmarks.some(({ mesh }, index) => Math.abs(car.position.x - (mesh.position.x + (index % 2 ? -7 : 7))) < 8 && Math.abs(car.position.z - (mesh.position.z + 12)) < 3);
       const offRoad = Math.abs(car.position.x) > 4.35 && Math.abs(car.position.z) > 4.35 && !onDistrictRoad;
       if (offRoad) velocity = THREE.MathUtils.clamp(velocity, -3.5, settingsRef.current.garage.vehicle === 'trail' ? 10.5 : ['suv', 'xuv700'].includes(settingsRef.current.garage.vehicle) ? 9 : 7);
-      steer = THREE.MathUtils.damp(steer, direction, pointer.down ? 10 : 12, delta);
+      steer = THREE.MathUtils.damp(steer, direction, 5, delta);
       if (!progressRef.current.drift) {
         fastTurnTime = velocity > 4 && Math.abs(steer) > 0.6 && jumpHeight === 0 ? fastTurnTime + delta : 0;
         if (fastTurnTime >= 4) recordProgress('drift', true);
       }
-      const grip = settingsRef.current.handling === 'relaxed' ? 1.4 : THREE.MathUtils.lerp(0.95, 0.53, Math.min(Math.abs(velocity) / 10, 1));
+      const grip = settingsRef.current.handling === 'relaxed' ? 0.6 : THREE.MathUtils.lerp(0.85, 0.42, Math.min(Math.abs(velocity) / 20, 1));
       // Keep high-speed steering controllable as supercar speeds increase.
-      yaw += steer * Math.sign(velocity) * Math.min(Math.abs(velocity) * grip, 2.4) * delta;
+      yaw += steer * Math.sign(velocity) * Math.min(Math.abs(velocity) * grip, 1.1) * delta;
       yaw = THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI;
       previousPosition.copy(car.position);
       car.position.x += Math.sin(yaw) * velocity * delta;
@@ -1144,7 +1155,7 @@ export default function Drive() {
       const uphillHeight = terrainHeightAt(car.position.x + Math.sin(yaw), car.position.z - Math.cos(yaw));
       car.rotation.x = THREE.MathUtils.damp(car.rotation.x, Math.atan(uphillHeight - terrainHeight), 6, delta);
       tailMaterial.color.setHex(braking || (reversing && velocity > 0.5) ? 0xff3922 : 0x9a392c);
-      boostGlow.visible = accelerating && keys.has('shift') && !reducedMotion.matches;
+      boostGlow.visible = accelerating && boosting && !reducedMotion.matches;
       boostGlow.scale.y = 0.8 + Math.abs(velocity) * 0.05;
       if (jumpSpeed !== 0 || jumpHeight > 0) {
         if (!jumpStart) jumpStart = { x: previousPosition.x, z: previousPosition.z };
@@ -1377,6 +1388,7 @@ export default function Drive() {
       intersection.disconnect();
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
+      window.removeEventListener('drive-touch-control', onTouchControl);
       window.removeEventListener('blur', clearControls);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('drive-destination', onDestination);
@@ -1411,10 +1423,10 @@ export default function Drive() {
   ];
   const openStoryStep = (index) => { setStoryStep(index); setStoryVisited((visited) => visited.includes(index) ? visited : [...visited, index]); };
   const touchControl = (key) => ({
-    onPointerDown: (event) => { event.currentTarget.setPointerCapture(event.pointerId); window.dispatchEvent(new KeyboardEvent('keydown', { key })); },
-    onPointerUp: () => window.dispatchEvent(new KeyboardEvent('keyup', { key })),
-    onPointerCancel: () => window.dispatchEvent(new KeyboardEvent('keyup', { key })),
-    onLostPointerCapture: () => window.dispatchEvent(new KeyboardEvent('keyup', { key })),
+    onPointerDown: (event) => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); window.dispatchEvent(new CustomEvent('drive-touch-control', { detail: { key, pressed: true } })); },
+    onPointerUp: () => window.dispatchEvent(new CustomEvent('drive-touch-control', { detail: { key, pressed: false } })),
+    onPointerCancel: () => window.dispatchEvent(new CustomEvent('drive-touch-control', { detail: { key, pressed: false } })),
+    onLostPointerCapture: () => window.dispatchEvent(new CustomEvent('drive-touch-control', { detail: { key, pressed: false } })),
   });
   return <main className={`drive-page${photoMode ? ' is-photo-mode' : ''}${menuOpen ? ' is-menu-open' : ''}`}>
     {showTutorial && !webglError && <section className="drive-world-panel drive-tutorial" aria-label="Driving controls"><small>WELCOME TO THE WORLD</small><h2>Ready to explore?</h2><p>Drive with <strong>WASD or arrow keys</strong>. Hold Space to brake, Shift to boost, and press J to jump.</p><p>Choose a destination for directions, press Enter near it to open it, and press Escape to close panels. Explore freely and collect crystals.</p><p>On a phone, use the buttons on screen. Open the garage to change your vehicle.</p><button className="drive-garage-done" onClick={() => { try { window.localStorage.setItem('portfolio-drive-tutorial-v1', 'done'); } catch { /* Continue for this visit. */ } setShowTutorial(false); }}>START DRIVING</button></section>}
