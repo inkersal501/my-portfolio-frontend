@@ -745,7 +745,9 @@ export default function Drive() {
     let velocity = 0;
     let automaticGear = 1;
     let shiftDip = 0;
-    const shiftPoints = [3, 5.5, 8, 10.5];
+    const regularShiftPoints = [3, 5.5, 8, 10.5];
+    // HUD speed is measured as world units per second multiplied by nine.
+    const supercarShiftPoints = [125 / 9, 250 / 9, 310 / 9, 380 / 9];
     let jumpHeight = 0;
     let jumpSpeed = 0;
     let jumpStart = null;
@@ -1038,13 +1040,16 @@ export default function Drive() {
         if (distance > 8 && !approachingSignal) vehicle.position.z += travel * 3.5 * delta;
         if (Math.abs(vehicle.position.z - car.position.z) > 125) vehicle.position.z = car.position.z - travel * 110;
       });
-        const vehicleSpeed = ['suv', 'xuv700'].includes(settingsRef.current.garage.vehicle) ? 0.82 : settingsRef.current.garage.vehicle === 'supercar' ? 1.18 : 1;
-        const targetVelocity = braking ? 0 : accelerating ? 12 * vehicleSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
-        const response = braking ? 12 : accelerating ? Math.max(0.7, 1.7 - (automaticGear - 1) * 0.16) : reversing ? 1.6 : 0.8;
+        const isSupercar = settingsRef.current.garage.vehicle === 'supercar';
+        const shiftPoints = isSupercar ? supercarShiftPoints : regularShiftPoints;
+        const vehicleSpeed = ['suv', 'xuv700'].includes(settingsRef.current.garage.vehicle) ? 0.82 : 1;
+        const topSpeed = isSupercar ? 40 : 12 * vehicleSpeed;
+        const targetVelocity = braking ? 0 : accelerating ? topSpeed * (settingsRef.current.handling === 'relaxed' ? 0.75 : 1) * (keys.has('shift') ? 1.35 : 1) : reversing ? -3.5 : 0;
+        const response = braking ? 12 : accelerating ? (isSupercar ? 0.45 : Math.max(0.7, 1.7 - (automaticGear - 1) * 0.16)) : reversing ? 1.6 : 0.8;
         velocity = THREE.MathUtils.damp(velocity, targetVelocity, response, delta);
       const oldGear = automaticGear;
       if (velocity > 0) {
-        while (automaticGear < 5 && velocity > shiftPoints[automaticGear - 1] + 0.25) automaticGear += 1;
+        while (automaticGear < 5 && velocity >= shiftPoints[automaticGear - 1]) automaticGear += 1;
         while (automaticGear > 1 && velocity < shiftPoints[automaticGear - 2] - 0.35) automaticGear -= 1;
       } else if (velocity < -0.2) automaticGear = 1;
       if (oldGear !== automaticGear) shiftDip = 0.28;
@@ -1058,7 +1063,8 @@ export default function Drive() {
         if (fastTurnTime >= 4) recordProgress('drift', true);
       }
       const grip = settingsRef.current.handling === 'relaxed' ? 1.4 : THREE.MathUtils.lerp(0.95, 0.53, Math.min(Math.abs(velocity) / 10, 1));
-      yaw += steer * velocity * delta * grip;
+      // Keep high-speed steering controllable as supercar speeds increase.
+      yaw += steer * Math.sign(velocity) * Math.min(Math.abs(velocity) * grip, 2.4) * delta;
       yaw = THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI;
       previousPosition.copy(car.position);
       car.position.x += Math.sin(yaw) * velocity * delta;
@@ -1285,7 +1291,7 @@ export default function Drive() {
       renderer.render(scene, camera);
       if (engineRef.current && audioRef.current) {
         const gearStart = automaticGear === 1 ? 0 : shiftPoints[automaticGear - 2];
-        const gearEnd = automaticGear === 5 ? 14 : shiftPoints[automaticGear - 1];
+        const gearEnd = automaticGear === 5 ? (isSupercar ? 54 : 14) : shiftPoints[automaticGear - 1];
         const gearPosition = velocity < 0 ? Math.abs(velocity) / 3.5 : (velocity - gearStart) / (gearEnd - gearStart);
         const revs = THREE.MathUtils.clamp(0.25 + gearPosition * 0.65 - shiftDip * 0.6, 0.2, 1);
         const frequency = 48 + revs * 72;
